@@ -30,6 +30,8 @@ RUN_ID_PATTERN = re.compile(
     r"T(?P<hour>\d{2})(?P<minute>\d{2})(?P<second>\d{2})Z-[0-9a-f]+$"
 )
 
+_UNSAFE_STAR_ID_CHARS = re.compile(r"[^A-Za-z0-9._-]+")
+
 
 @dataclass(frozen=True)
 class RunInfo:
@@ -172,6 +174,16 @@ def latest_run(artifact_dir: Path | str = "models") -> RunInfo:
     raise FileNotFoundError(f"No trained runs found under {artifact_dir}.")
 
 
+def _safe_star_id(star_id: str) -> str:
+    """Reduce a caller-supplied id to something safe as a filename stem.
+
+    ``star_id`` reaches this module from a network request and becomes part
+    of a path, so separators and traversal segments must not survive.
+    """
+    cleaned = _UNSAFE_STAR_ID_CHARS.sub("-", star_id).strip(".-")
+    return cleaned or "unknown"
+
+
 def predict_features(
     rows: list[dict[str, Any]],
     model_dir: Path | str,
@@ -192,7 +204,7 @@ def predict_features(
     with tempfile.TemporaryDirectory(prefix="fang-predict-") as staging:
         # load_dataset requires filenames shaped "<star_id>_YYYYMMDD.csv".
         stamp = dt.datetime.now(dt.UTC).strftime("%Y%m%d")
-        destination = Path(staging) / f"{star_id}_{stamp}.csv"
+        destination = Path(staging) / f"{_safe_star_id(star_id)}_{stamp}.csv"
         frame.to_csv(destination, index=False)
 
         predictions = predict_dataset(model=Path(model_dir), data_dir=Path(staging))

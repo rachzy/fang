@@ -16,9 +16,9 @@ the model cannot be graded on a candidate it was never shown.
 
 Usage (with the project venv active)::
 
-    python fang/scripts/compare_confirmed_and_prediction.py
-    python fang/scripts/compare_confirmed_and_prediction.py --predictions runs/p.csv
-    python fang/scripts/compare_confirmed_and_prediction.py --threshold 0.5
+    python -m fang.scripts.compare_confirmed_and_prediction
+    python -m fang.scripts.compare_confirmed_and_prediction --predictions runs/p.csv
+    python -m fang.scripts.compare_confirmed_and_prediction --threshold 0.5
 """
 
 from __future__ import annotations

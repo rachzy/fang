@@ -75,12 +75,45 @@ def test_loose_files_in_the_artifact_dir_are_ignored(tmp_path):
     assert len(list_runs(tmp_path)) == 1
 
 
-def test_run_with_missing_sidecars_still_lists(tmp_path):
-    """A bundle with no sidecars is listed with fallbacks, not skipped."""
+def test_run_with_missing_sidecars_is_skipped(tmp_path):
+    """A bundle with no sidecars has no known threshold, so it cannot be served."""
     directory = tmp_path / "20260929T120000Z-abcd1234"
     directory.mkdir(parents=True)
     (directory / "model.joblib").write_bytes(b"bundle")
 
-    run = list_runs(tmp_path)[0]
-    assert run.run_id == "20260929T120000Z-abcd1234"
-    assert run.selected_model == ""
+    assert list_runs(tmp_path) == []
+
+
+def test_directory_that_is_not_a_run_id_is_skipped(tmp_path):
+    """`models/latest` sorts above every timestamped id; it must not become newest."""
+    _write_run(tmp_path, "20260929T120000Z-abcd1234")
+    _write_run(tmp_path, "latest")
+
+    runs = list_runs(tmp_path)
+    assert [r.run_id for r in runs] == ["20260929T120000Z-abcd1234"]
+
+
+def test_corrupt_sidecar_is_skipped_without_crashing_the_listing(tmp_path):
+    """One truncated sidecar must not take the whole registry down with it."""
+    _write_run(tmp_path, "20260101T000000Z-aaaaaaaa")
+    broken = _write_run(tmp_path, "20261231T235959Z-bbbbbbbb")
+    (broken / "threshold.json").write_text('{"threshold": 0.5, "selected')
+
+    runs = list_runs(tmp_path)
+    assert [r.run_id for r in runs] == ["20260101T000000Z-aaaaaaaa"]
+
+
+def test_sidecar_that_is_not_a_mapping_is_skipped(tmp_path):
+    """Valid JSON of the wrong shape must not raise AttributeError on .get."""
+    broken = _write_run(tmp_path, "20260929T120000Z-abcd1234")
+    (broken / "threshold.json").write_text("[]")
+
+    assert list_runs(tmp_path) == []
+
+
+def test_non_numeric_threshold_is_skipped(tmp_path):
+    """A threshold that will not cast must not reach a caller as 0.0."""
+    broken = _write_run(tmp_path, "20260929T120000Z-abcd1234")
+    (broken / "threshold.json").write_text('{"selected_model": "lightgbm", "threshold": "high"}')
+
+    assert list_runs(tmp_path) == []

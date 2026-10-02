@@ -7,12 +7,15 @@ nothing in this module unpickles a model bundle except prediction itself.
 from __future__ import annotations
 
 import json
+import logging
 import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+logger = logging.getLogger(__name__)
 
 BUNDLE_FILENAME = "model.joblib"
 RUN_ID_PATTERN = re.compile(
@@ -45,27 +48,34 @@ def _created_at_from_run_id(run_id: str) -> str:
     )
 
 
-def _read_json(path: Path) -> dict[str, Any]:
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {}
+def _read_mapping(path: Path) -> dict[str, Any] | None:
+    """Parse a JSON or YAML sidecar, or None when it is unusable.
 
-
-def _read_yaml(path: Path) -> dict[str, Any]:
+    Returns None rather than an empty dict so a corrupt file can never be
+    mistaken for a file whose fields happen to be absent.
+    """
     try:
-        return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    except (OSError, yaml.YAMLError):
-        return {}
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    try:
+        parsed = json.loads(text) if path.suffix == ".json" else yaml.safe_load(text)
+    except (json.JSONDecodeError, yaml.YAMLError):
+        return None
+    return parsed if isinstance(parsed, dict) else None
 
 
 def list_runs(artifact_dir: Path | str = "models") -> list[RunInfo]:
-    """Every trained run under ``artifact_dir``, newest first.
+    """Every trained run under ``artifact_dir`` that is safe to serve, newest first.
 
-    A directory counts as a run when it contains ``model.joblib``; anything
-    else is a partial or aborted run and is skipped. Returns an empty list
-    when the directory does not exist, which is the state before the first
-    model is ever trained.
+    A run qualifies when it has a bundle, a run id this build recognises, and
+    readable sidecars carrying a numeric threshold and schema version.
+    Everything else is skipped with a warning: a hand-named directory such as
+    ``models/latest`` would otherwise sort above every timestamped id and
+    become the newest run, and a truncated sidecar would otherwise be served
+    as ``threshold=0.0``, a legitimate value that classifies every candidate
+    as positive. Returns an empty list when the directory does not exist,
+    which is the state before the first model is ever trained.
     """
     base = Path(artifact_dir)
     if not base.is_dir():
@@ -76,16 +86,32 @@ def list_runs(artifact_dir: Path | str = "models") -> list[RunInfo]:
         if not directory.is_dir() or not (directory / BUNDLE_FILENAME).is_file():
             continue
 
-        schema = _read_yaml(directory / "feature_schema.yaml")
-        threshold = _read_json(directory / "threshold.json")
+        created_at = _created_at_from_run_id(directory.name)
+        if not created_at:
+            logger.warning("Skipping %s: not a run id this build recognises.", directory)
+            continue
+
+        schema = _read_mapping(directory / "feature_schema.yaml")
+        threshold = _read_mapping(directory / "threshold.json")
+        if schema is None or threshold is None:
+            logger.warning("Skipping %s: a sidecar is missing or malformed.", directory)
+            continue
+
+        try:
+            schema_version = int(schema["schema_version"])
+            decision_threshold = float(threshold["threshold"])
+            selected_model = str(threshold["selected_model"])
+        except (KeyError, TypeError, ValueError):
+            logger.warning("Skipping %s: a sidecar field is missing or not a number.", directory)
+            continue
 
         runs.append(
             RunInfo(
                 run_id=directory.name,
-                created_at=_created_at_from_run_id(directory.name),
-                schema_version=int(schema.get("schema_version", 0)),
-                selected_model=str(threshold.get("selected_model", "")),
-                threshold=float(threshold.get("threshold", 0.0)),
+                created_at=created_at,
+                schema_version=schema_version,
+                selected_model=selected_model,
+                threshold=decision_threshold,
                 path=directory,
             )
         )

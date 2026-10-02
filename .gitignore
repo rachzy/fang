@@ -17,3 +17,6 @@ reports/
 predictions/
 predictions.csv
 *.predictions.csv
+
+# Implementation plans (local only, deleted when the refactor is done)
+plans/

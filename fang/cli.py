@@ -1,4 +1,4 @@
-"""The ``exoplanet-ml`` command line interface."""
+"""The ``fang`` command line interface."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ from .training import (
 )
 
 app = typer.Typer(
-    name="exoplanet-ml",
+    name="fang",
     help=(
         "Screen transit exoplanet candidates with a star-grouped stacked classifier. "
         "potential_probability is a screening score, not scientific confirmation."

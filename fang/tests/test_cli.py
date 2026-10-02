@@ -1,4 +1,4 @@
-"""The exoplanet-ml command line surface."""
+"""The fang command line surface."""
 
 from __future__ import annotations
 

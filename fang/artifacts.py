@@ -19,7 +19,7 @@ import yaml
 from .errors import TransitExoplanetMLError
 
 TRACKED_PACKAGES = (
-    "transit-exoplanet-ml",
+    "fang",
     "numpy",
     "pandas",
     "scipy",

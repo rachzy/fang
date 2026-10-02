@@ -9,14 +9,14 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.data import (
+from fang.data import (
     load_dataset,
     parse_source_filename,
     star_balanced_weights,
     validate_dataset,
 )
-from src.errors import DataValidationError, EmptyDatasetError
-from src.tests.conftest import write_synthetic_dataset
+from fang.errors import DataValidationError, EmptyDatasetError
+from fang.tests.conftest import write_synthetic_dataset
 
 
 # ---------------------------------------------------------------------------

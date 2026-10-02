@@ -5,11 +5,11 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from src import stacking
-from src.data import load_dataset
-from src.errors import DataDiversityError
-from src.models import meta_candidate_params
-from src.stacking import (
+from fang import stacking
+from fang.data import load_dataset
+from fang.errors import DataDiversityError
+from fang.models import meta_candidate_params
+from fang.stacking import (
     STACK,
     fit_stack,
     grouped_splits,

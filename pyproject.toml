@@ -23,7 +23,7 @@ dependencies = [
 ]
 
 [project.scripts]
-exoplanet-ml = "src.cli:app"
+exoplanet-ml = "fang.cli:app"
 
 [dependency-groups]
 dev = [
@@ -33,24 +33,24 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src"]
+packages = ["fang"]
 
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-src = ["src"]
+src = ["fang"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 ignore = ["B905"]
 
 [tool.pytest.ini_options]
-testpaths = ["src/tests"]
+testpaths = ["fang/tests"]
 pythonpath = ["."]
 addopts = "-q"
 filterwarnings = ["ignore::DeprecationWarning"]
 
 [tool.coverage.run]
-source = ["src"]
-omit = ["src/tests/*"]
+source = ["fang"]
+omit = ["fang/tests/*"]
 branch = true

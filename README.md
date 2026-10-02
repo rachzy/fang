@@ -48,7 +48,7 @@ holds for the accepted-only meta-model fit.
 
 ### Feature allowlist
 
-The schema in [`src/resources/schema.yaml`](src/resources/schema.yaml)
+The schema in [`fang/resources/schema.yaml`](fang/resources/schema.yaml)
 is versioned and strict: exactly 36 columns reach a model. Everything else in
 the CSVs is withheld, for a stated reason:
 
@@ -128,7 +128,7 @@ output is byte-stable across runs.
 ## Python API
 
 ```python
-from src import (
+from fang import (
     load_dataset, validate_dataset, evaluate_dataset,
     train_model, load_model, predict_dataset,
 )
@@ -244,7 +244,7 @@ from a location you trust.
 
 ```bash
 uv run pytest              # 173 tests, no repository data required
-uv run ruff check src
+uv run ruff check fang
 uv run coverage run -m pytest && uv run coverage report
 ```
 

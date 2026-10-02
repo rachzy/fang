@@ -11,12 +11,12 @@ import pandas as pd
 import pytest
 import yaml
 
-from src.data import load_dataset
-from src.errors import SchemaVersionError, TransitExoplanetMLError
-from src.evaluate import evaluate_dataset
-from src.predict import ADDED_COLUMNS, predict_dataset
-from src.schema import load_schema
-from src.training import (
+from fang.data import load_dataset
+from fang.errors import SchemaVersionError, TransitExoplanetMLError
+from fang.evaluate import evaluate_dataset
+from fang.predict import ADDED_COLUMNS, predict_dataset
+from fang.schema import load_schema
+from fang.training import (
     POTENTIAL,
     UNLIKELY,
     ModelBundle,
@@ -108,7 +108,7 @@ def test_would_ship_is_the_highest_average_precision(evaluation):
 
 
 def test_evaluation_result_is_json_serialisable(evaluation, tmp_path):
-    from src.artifacts import write_json
+    from fang.artifacts import write_json
 
     path = write_json(tmp_path / "metrics.json", evaluation.to_dict())
     payload = json.loads(path.read_text())
@@ -127,7 +127,7 @@ def test_evaluation_result_is_json_serialisable(evaluation, tmp_path):
 def test_fold_ap_reports_equal_fold_means_and_unscorable_folds(
     evaluation, tmp_path, scores, expected_mean, expected_std, valid_count
 ):
-    from src.artifacts import write_json
+    from fang.artifacts import write_json
 
     # Unequal sample counts must not turn the fold mean into a row-weighted
     # mean. Missing and single-class folds remain visible in the report.
@@ -258,7 +258,7 @@ def test_manifest_covers_every_written_file(trained):
 
 
 def test_rerunning_into_a_populated_directory_is_refused(trained, fast_config):
-    from src.errors import TransitExoplanetMLError
+    from fang.errors import TransitExoplanetMLError
 
     with pytest.raises(TransitExoplanetMLError, match="immutable"):
         write_training_artifacts(trained, trained.artifact_dir.parent)

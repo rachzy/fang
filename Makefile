@@ -52,10 +52,10 @@ coverage: ## Run the test suite with a coverage report
 	uv run coverage report
 
 lint: ## Lint the source with ruff
-	uv run ruff check src
+	uv run ruff check fang
 
 format: ## Auto-format the source with ruff
-	uv run ruff format src
+	uv run ruff format fang
 
 clean: ## Remove generated models, reports, predictions, and caches
 	rm -rf $(ARTIFACT_DIR) reports predictions.csv predictions_*.csv

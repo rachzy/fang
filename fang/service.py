@@ -196,6 +196,9 @@ def predict_features(
     :func:`fang.predict.predict_dataset` applies the same strict schema
     validation it applies to files on disk. Extra columns the schema excludes
     are tolerated and dropped; missing feature columns raise.
+
+    ``star_id`` is returned as supplied. Only the internal staging filename
+    is sanitised (see :func:`_safe_star_id`), so callers can join on it.
     """
     if not rows:
         raise EmptyDatasetError("predict_features was given no rows to score.")
@@ -209,4 +212,8 @@ def predict_features(
 
         predictions = predict_dataset(model=Path(model_dir), data_dir=Path(staging))
 
-    return predictions.to_dict(orient="records")
+    records = predictions.to_dict(orient="records")
+    for record in records:
+        # The staging filename is sanitised and internal; callers get their own id back.
+        record["star_id"] = star_id
+    return records

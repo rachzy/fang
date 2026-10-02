@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
+import tempfile
+from pathlib import Path
 
+import pandas as pd
 import pytest
 import yaml
 
@@ -179,7 +182,7 @@ def test_missing_or_empty_selected_model_is_skipped(tmp_path):
 
 
 from ..errors import DataValidationError, EmptyDatasetError  # noqa: E402
-from ..service import latest_run, predict_features  # noqa: E402
+from ..service import _safe_star_id, latest_run, predict_features  # noqa: E402
 
 
 @pytest.fixture(scope="module")
@@ -282,24 +285,43 @@ def test_latest_run_says_when_every_run_was_unservable(tmp_path):
         latest_run(tmp_path)
 
 
+def test_star_id_with_path_separators_cannot_escape_the_staging_dir(
+    trained_run, feature_rows, monkeypatch
+):
+    """star_id arrives from a network request and must not reach a path unsanitised.
 
-def test_star_id_with_path_separators_cannot_escape_the_staging_dir(trained_run, feature_rows):
-    """star_id arrives from a network request and must not reach a path unsanitised."""
+    Spies on the staged CSV path itself: the returned star_id is the caller's raw
+    value, so only the path proves the sanitising.
+    """
+    staged: list[Path] = []
+    real_to_csv = pd.DataFrame.to_csv
+
+    def spy(self, path_or_buf=None, *args, **kwargs):
+        staged.append(Path(path_or_buf))
+        return real_to_csv(self, path_or_buf, *args, **kwargs)
+
+    monkeypatch.setattr(pd.DataFrame, "to_csv", spy)
+
     predictions = predict_features(
         feature_rows, trained_run, star_id="../../escaped/KIC-1"
     )
 
     assert len(predictions) == 2
-    recorded = predictions[0]["star_id"]
-    assert ".." not in recorded
-    assert "/" not in recorded
+    assert len(staged) == 1
+    destination = staged[0]
+    assert destination.parent.name.startswith("fang-predict-")
+    assert destination.parent.parent == Path(tempfile.gettempdir())
+    assert destination.name.startswith("escaped-KIC-1_")
 
 
-def test_star_id_that_sanitises_to_nothing_falls_back(trained_run, feature_rows):
-    predictions = predict_features(feature_rows, trained_run, star_id="../..")
-    assert predictions[0]["star_id"] == "unknown"
-
-
-def test_ordinary_star_id_survives_sanitisation_recognisably(trained_run, feature_rows):
+def test_star_id_is_returned_as_supplied(trained_run, feature_rows):
     predictions = predict_features(feature_rows, trained_run, star_id="KIC 8120608")
-    assert predictions[0]["star_id"] == "KIC-8120608"
+    assert {p["star_id"] for p in predictions} == {"KIC 8120608"}
+
+
+def test_star_id_that_sanitises_to_nothing_falls_back():
+    assert _safe_star_id("../..") == "unknown"
+
+
+def test_ordinary_star_id_survives_sanitisation_recognisably():
+    assert _safe_star_id("KIC 8120608") == "KIC-8120608"

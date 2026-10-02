@@ -176,3 +176,108 @@ def test_missing_or_empty_selected_model_is_skipped(tmp_path):
         '{"selected_model": "", "threshold": 0.5}'
     )
     assert list_runs(tmp_path) == []
+
+
+from ..errors import DataValidationError, EmptyDatasetError  # noqa: E402
+from ..service import latest_run, predict_features  # noqa: E402
+
+
+@pytest.fixture(scope="module")
+def trained_run(tmp_path_factory, fast_config):
+    """Train one small real model and write it to an artifact directory."""
+    from fang.tests.conftest import write_synthetic_dataset
+
+    from ..data import load_dataset
+    from ..training import train_model, write_training_artifacts
+
+    data_dir = write_synthetic_dataset(tmp_path_factory.mktemp("train"))
+    dataset = load_dataset(data_dir, mode="train")
+    run = train_model(dataset=dataset, config=fast_config, run_evaluation=False)
+
+    artifacts = tmp_path_factory.mktemp("artifacts")
+    write_training_artifacts(run, artifacts)
+    return artifacts / run.bundle.run_id
+
+
+@pytest.fixture
+def feature_rows(schema):
+    """Two candidate rows carrying exactly the schema's feature columns."""
+    return [
+        {name: 1.0 for name in schema.feature_columns},
+        {name: 2.0 for name in schema.feature_columns},
+    ]
+
+
+def test_predicts_every_row(trained_run, feature_rows):
+    predictions = predict_features(feature_rows, trained_run)
+
+    assert len(predictions) == 2
+    assert all("prob_stack" in row for row in predictions)
+    assert all("prediction" in row for row in predictions)
+
+
+def test_predictions_carry_the_model_run_id(trained_run, feature_rows):
+    predictions = predict_features(feature_rows, trained_run)
+    assert predictions[0]["model_run_id"] == trained_run.name
+
+
+def test_star_id_is_preserved_in_the_output(trained_run, feature_rows):
+    predictions = predict_features(feature_rows, trained_run, star_id="KIC-8120608")
+    assert predictions[0]["star_id"] == "KIC-8120608"
+
+
+def test_excluded_columns_are_accepted_and_ignored(trained_run, feature_rows, schema):
+    """Shaula emits columns no model may see; they must not break prediction."""
+    rows = [dict(row) for row in feature_rows]
+    for row in rows:
+        row["t0"] = 131.5
+        row["mes_threshold_used"] = 7.1
+        row["duration_days"] = 0.12
+
+    predictions = predict_features(rows, trained_run)
+    assert len(predictions) == 2
+    assert all(c not in schema.feature_columns for c in ("t0", "mes_threshold_used"))
+
+
+def test_missing_feature_column_raises_naming_it(trained_run, feature_rows):
+    rows = [dict(row) for row in feature_rows]
+    for row in rows:
+        del row["period_days"]
+
+    with pytest.raises(DataValidationError, match="period_days"):
+        predict_features(rows, trained_run)
+
+
+def test_empty_rows_raise_rather_than_returning_nothing(trained_run):
+    with pytest.raises(EmptyDatasetError):
+        predict_features([], trained_run)
+
+
+def test_latest_run_picks_the_newest(tmp_path):
+    _write_run(tmp_path, "20260101T000000Z-aaaaaaaa")
+    _write_run(tmp_path, "20261231T235959Z-bbbbbbbb")
+
+    assert latest_run(tmp_path).run_id == "20261231T235959Z-bbbbbbbb"
+
+
+def test_latest_run_with_no_runs_raises(tmp_path):
+    with pytest.raises(FileNotFoundError, match="No trained runs"):
+        latest_run(tmp_path)
+
+
+def test_a_real_trained_run_is_listed(trained_run):
+    """The validation in list_runs must accept what write_training_artifacts produces."""
+    runs = list_runs(trained_run.parent)
+
+    assert [r.run_id for r in runs] == [trained_run.name]
+    assert runs[0].selected_model
+    assert runs[0].schema_version == 1
+    assert 0.0 < runs[0].threshold <= 1.0
+
+
+def test_latest_run_says_when_every_run_was_unservable(tmp_path):
+    _write_run(tmp_path, "20260101T000000Z-aaaaaaaa", threshold=float("nan"))
+
+    with pytest.raises(FileNotFoundError, match="none was servable"):
+        latest_run(tmp_path)
+

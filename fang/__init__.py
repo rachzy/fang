@@ -23,6 +23,7 @@ from .errors import (
 from .evaluate import evaluate_dataset
 from .predict import predict_dataset
 from .schema import FeatureSchema, load_schema
+from .service import RunInfo, latest_run, list_runs, predict_features
 from .training import ModelBundle, load_model, train_model
 
 __version__ = "0.1.0"
@@ -36,15 +37,19 @@ __all__ = [
     "EmptyDatasetError",
     "FeatureSchema",
     "ModelBundle",
+    "RunInfo",
     "SchemaVersionError",
     "TransitExoplanetMLError",
     "__version__",
     "evaluate_dataset",
+    "latest_run",
+    "list_runs",
     "load_config",
     "load_dataset",
     "load_model",
     "load_schema",
     "predict_dataset",
+    "predict_features",
     "train_model",
     "validate_dataset",
 ]

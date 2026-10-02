@@ -6,15 +6,21 @@ nothing in this module unpickles a model bundle except prediction itself.
 
 from __future__ import annotations
 
+import datetime as dt
 import json
 import logging
 import math
 import re
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
 import yaml
+
+from .errors import EmptyDatasetError
+from .predict import predict_dataset
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +98,8 @@ def list_runs(artifact_dir: Path | str = "models") -> list[RunInfo]:
 
     A run qualifies when it has a bundle, a run id this build recognises, and
     readable sidecars carrying a numeric threshold and schema version.
-    Everything else is skipped with a warning: a hand-named directory such as
+    Everything else is skipped (malformed sidecars warn; sidecars that are
+    not written yet are logged at debug): a hand-named directory such as
     ``models/latest`` would otherwise sort above every timestamped id and
     become the newest run, and a truncated sidecar would otherwise be served
     as ``threshold=0.0``, a legitimate value that classifies every candidate
@@ -148,3 +155,46 @@ def list_runs(artifact_dir: Path | str = "models") -> list[RunInfo]:
             )
         )
     return runs
+
+
+def latest_run(artifact_dir: Path | str = "models") -> RunInfo:
+    """The newest trained run under ``artifact_dir``."""
+    runs = list_runs(artifact_dir)
+    if runs:
+        return runs[0]
+
+    base = Path(artifact_dir)
+    if base.is_dir() and any(base.iterdir()):
+        raise FileNotFoundError(
+            f"No trained runs found under {artifact_dir}: entries exist but none "
+            "was servable. Check the warning log for why each was skipped."
+        )
+    raise FileNotFoundError(f"No trained runs found under {artifact_dir}.")
+
+
+def predict_features(
+    rows: list[dict[str, Any]],
+    model_dir: Path | str,
+    *,
+    star_id: str = "unknown",
+) -> list[dict[str, Any]]:
+    """Score in-memory candidate rows with the model bundle in ``model_dir``.
+
+    The rows are staged as one per-star CSV in a temporary directory so that
+    :func:`fang.predict.predict_dataset` applies the same strict schema
+    validation it applies to files on disk. Extra columns the schema excludes
+    are tolerated and dropped; missing feature columns raise.
+    """
+    if not rows:
+        raise EmptyDatasetError("predict_features was given no rows to score.")
+    frame = pd.DataFrame(rows)
+
+    with tempfile.TemporaryDirectory(prefix="fang-predict-") as staging:
+        # load_dataset requires filenames shaped "<star_id>_YYYYMMDD.csv".
+        stamp = dt.datetime.now(dt.UTC).strftime("%Y%m%d")
+        destination = Path(staging) / f"{star_id}_{stamp}.csv"
+        frame.to_csv(destination, index=False)
+
+        predictions = predict_dataset(model=Path(model_dir), data_dir=Path(staging))
+
+    return predictions.to_dict(orient="records")

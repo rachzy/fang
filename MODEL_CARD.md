@@ -4,7 +4,7 @@
 
 |                   |                                                                                  |
 | ----------------- | -------------------------------------------------------------------------------- |
-| **Name**          | transit-exoplanet-ml candidate screener                                          |
+| **Name**          | Fang candidate screener                                                          |
 | **Version**       | 0.1.0 (feature schema version 1)                                                 |
 | **Type**          | Stacked binary classifier                                                        |
 | **Base learners** | LightGBM, ExtraTrees (500 trees), RBF SVM (Platt-scaled), L2 logistic regression |

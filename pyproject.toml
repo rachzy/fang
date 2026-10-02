@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "transit-exoplanet-ml"
+name = "fang"
 version = "0.1.0"
 description = "Star-grouped stacked classifier for screening transit exoplanet candidates"
 readme = "README.md"
@@ -23,7 +23,7 @@ dependencies = [
 ]
 
 [project.scripts]
-exoplanet-ml = "fang.cli:app"
+fang = "fang.cli:app"
 
 [dependency-groups]
 dev = [

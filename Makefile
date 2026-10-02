@@ -19,16 +19,16 @@ install: ## Install/sync dependencies with uv
 validate: validate-train validate-predict ## Validate both the train and test data directories
 
 validate-train: ## Validate the training data directory against the train contract
-	uv run exoplanet-ml validate --mode train --data-dir $(DATA_DIR)
+	uv run fang validate --mode train --data-dir $(DATA_DIR)
 
 validate-predict: ## Validate the test data directory against the predict contract
-	uv run exoplanet-ml validate --mode predict --data-dir $(TEST_DIR)
+	uv run fang validate --mode predict --data-dir $(TEST_DIR)
 
 evaluate: ## Run nested star-grouped evaluation and write the report
-	uv run exoplanet-ml evaluate --data-dir $(DATA_DIR) --output-dir $(REPORT_DIR)
+	uv run fang evaluate --data-dir $(DATA_DIR) --output-dir $(REPORT_DIR)
 
 train: ## Train the production stack into a new immutable run directory
-	uv run exoplanet-ml train --data-dir $(DATA_DIR) --artifact-dir $(ARTIFACT_DIR)
+	uv run fang train --data-dir $(DATA_DIR) --artifact-dir $(ARTIFACT_DIR)
 
 predict: ## Score the test data (uses the latest run under ARTIFACT_DIR, or pass MODEL_DIR=path)
 	@model_dir="$(MODEL_DIR)"; \
@@ -40,7 +40,7 @@ predict: ## Score the test data (uses the latest run under ARTIFACT_DIR, or pass
 		exit 1; \
 	fi; \
 	echo "Using model: $$model_dir"; \
-	uv run exoplanet-ml predict --model-dir "$$model_dir" --data-dir $(TEST_DIR) --output $(OUTPUT)
+	uv run fang predict --model-dir "$$model_dir" --data-dir $(TEST_DIR) --output $(OUTPUT)
 
 full-pipeline: train predict ## Train the stack, then predict on the test data
 

@@ -1,4 +1,4 @@
-# transit-exoplanet-ml
+# Fang
 
 A reproducible screening model for transit exoplanet candidates. It validates
 processed per-star candidate tables, compares six star-grouped classifiers under
@@ -17,7 +17,7 @@ committed `uv.lock`. It targets CPython 3.14 and supports 3.11 – 3.14.
 
 ```bash
 uv sync
-uv run exoplanet-ml --help
+uv run fang --help
 ```
 
 Installation and the test suite do not depend on `data/` being populated.
@@ -66,17 +66,17 @@ refuse to load against a schema they were not trained on.
 
 ```bash
 # 1. Check a directory against the contract
-uv run exoplanet-ml validate --mode train   --data-dir data/processed/train
-uv run exoplanet-ml validate --mode predict --data-dir data/processed/test
+uv run fang validate --mode train   --data-dir data/processed/train
+uv run fang validate --mode predict --data-dir data/processed/test
 
 # 2. Nested, star-grouped evaluation
-uv run exoplanet-ml evaluate --data-dir data/processed/train --output-dir reports/nested-cv
+uv run fang evaluate --data-dir data/processed/train --output-dir reports/nested-cv
 
 # 3. Train every candidate, ship the best, into an immutable run directory
-uv run exoplanet-ml train --data-dir data/processed/train --artifact-dir models
+uv run fang train --data-dir data/processed/train --artifact-dir models
 
 # 4. Score unseen stars
-uv run exoplanet-ml predict \
+uv run fang predict \
     --model-dir models/<run-id> \
     --data-dir data/processed/test \
     --output predictions.csv

@@ -1,6 +1,6 @@
 """Star-grouped stacked classifier for screening transit exoplanet candidates.
 
-The public API mirrors the ``exoplanet-ml`` CLI:
+The public API mirrors the ``fang`` CLI:
 
 * :func:`load_dataset` / :func:`validate_dataset` -- read and check processed CSVs
 * :func:`evaluate_dataset` -- nested, star-grouped evaluation

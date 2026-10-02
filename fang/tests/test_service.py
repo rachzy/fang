@@ -117,3 +117,62 @@ def test_non_numeric_threshold_is_skipped(tmp_path):
     (broken / "threshold.json").write_text('{"selected_model": "lightgbm", "threshold": "high"}')
 
     assert list_runs(tmp_path) == []
+
+
+def test_invalid_utf8_sidecar_is_skipped_without_crashing(tmp_path):
+    """read_text raises UnicodeDecodeError, a ValueError that OSError does not catch."""
+    _write_run(tmp_path, "20260101T000000Z-aaaaaaaa")
+    broken = _write_run(tmp_path, "20261231T235959Z-bbbbbbbb")
+    (broken / "threshold.json").write_bytes(b'{"threshold": \xff\xfe}')
+
+    assert [r.run_id for r in list_runs(tmp_path)] == ["20260101T000000Z-aaaaaaaa"]
+
+
+def test_infinite_schema_version_is_skipped(tmp_path):
+    """json.loads accepts the bare Infinity literal; int(inf) raises OverflowError."""
+    broken = _write_run(tmp_path, "20260929T120000Z-abcd1234")
+    (broken / "feature_schema.yaml").write_text("schema_version: .inf")
+
+    assert list_runs(tmp_path) == []
+
+
+def test_huge_threshold_is_skipped(tmp_path):
+    broken = _write_run(tmp_path, "20260929T120000Z-abcd1234")
+    (broken / "threshold.json").write_text(
+        '{"selected_model": "lightgbm", "threshold": 1e400}'
+    )
+
+    assert list_runs(tmp_path) == []
+
+
+def test_nan_threshold_is_skipped(tmp_path):
+    """A NaN threshold makes every comparison false, classifying nothing."""
+    broken = _write_run(tmp_path, "20260929T120000Z-abcd1234")
+    (broken / "threshold.json").write_text(
+        '{"selected_model": "lightgbm", "threshold": NaN}'
+    )
+
+    assert list_runs(tmp_path) == []
+
+
+def test_boolean_schema_version_is_skipped(tmp_path):
+    """int(True) is 1, so a boolean would otherwise pass as a version."""
+    broken = _write_run(tmp_path, "20260929T120000Z-abcd1234")
+    (broken / "feature_schema.yaml").write_text("schema_version: true")
+
+    assert list_runs(tmp_path) == []
+
+
+def test_missing_or_empty_selected_model_is_skipped(tmp_path):
+    """str(None) was yielding the literal string "None"."""
+    null_model = _write_run(tmp_path, "20260929T120000Z-abcd1234")
+    (null_model / "threshold.json").write_text(
+        '{"selected_model": null, "threshold": 0.5}'
+    )
+    assert list_runs(tmp_path) == []
+
+    empty_model = _write_run(tmp_path, "20260930T120000Z-abcd1234")
+    (empty_model / "threshold.json").write_text(
+        '{"selected_model": "", "threshold": 0.5}'
+    )
+    assert list_runs(tmp_path) == []

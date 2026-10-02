@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -56,13 +57,34 @@ def _read_mapping(path: Path) -> dict[str, Any] | None:
     """
     try:
         text = path.read_text(encoding="utf-8")
-    except OSError:
+    except (OSError, ValueError):
         return None
     try:
         parsed = json.loads(text) if path.suffix == ".json" else yaml.safe_load(text)
-    except (json.JSONDecodeError, yaml.YAMLError):
+    except (ValueError, yaml.YAMLError):
         return None
     return parsed if isinstance(parsed, dict) else None
+
+
+def _as_int(value: Any) -> int:
+    """Coerce to int, rejecting bools that int() would silently accept."""
+    if isinstance(value, bool):
+        raise TypeError("expected a number, got a boolean")
+    return int(value)
+
+
+def _as_finite_float(value: Any) -> float:
+    """Coerce to float, rejecting bools, NaN and infinity.
+
+    A NaN threshold makes every comparison false, so nothing is ever
+    classified positive — an unusable model served as a working one.
+    """
+    if isinstance(value, bool):
+        raise TypeError("expected a number, got a boolean")
+    number = float(value)
+    if not math.isfinite(number):
+        raise ValueError(f"expected a finite number, got {number!r}")
+    return number
 
 
 def list_runs(artifact_dir: Path | str = "models") -> list[RunInfo]:
@@ -91,18 +113,28 @@ def list_runs(artifact_dir: Path | str = "models") -> list[RunInfo]:
             logger.warning("Skipping %s: not a run id this build recognises.", directory)
             continue
 
-        schema = _read_mapping(directory / "feature_schema.yaml")
-        threshold = _read_mapping(directory / "threshold.json")
+        schema_path = directory / "feature_schema.yaml"
+        threshold_path = directory / "threshold.json"
+        if not schema_path.is_file() or not threshold_path.is_file():
+            logger.debug("Skipping %s: sidecars not written yet.", directory)
+            continue
+
+        schema = _read_mapping(schema_path)
+        threshold = _read_mapping(threshold_path)
         if schema is None or threshold is None:
-            logger.warning("Skipping %s: a sidecar is missing or malformed.", directory)
+            logger.warning("Skipping %s: a sidecar is malformed.", directory)
             continue
 
         try:
-            schema_version = int(schema["schema_version"])
-            decision_threshold = float(threshold["threshold"])
-            selected_model = str(threshold["selected_model"])
-        except (KeyError, TypeError, ValueError):
-            logger.warning("Skipping %s: a sidecar field is missing or not a number.", directory)
+            schema_version = _as_int(schema["schema_version"])
+            decision_threshold = _as_finite_float(threshold["threshold"])
+            selected_model = threshold["selected_model"]
+        except (KeyError, TypeError, ValueError, OverflowError) as error:
+            logger.warning("Skipping %s: bad sidecar field (%s).", directory, error)
+            continue
+
+        if not isinstance(selected_model, str) or not selected_model:
+            logger.warning("Skipping %s: selected_model is missing or empty.", directory)
             continue
 
         runs.append(

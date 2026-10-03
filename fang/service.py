@@ -19,8 +19,9 @@ from typing import Any
 import pandas as pd
 import yaml
 
-from .errors import EmptyDatasetError
-from .predict import predict_dataset
+from .artifacts import _clean
+from .errors import DataValidationError, EmptyDatasetError
+from .predict import ADDED_COLUMNS, predict_dataset
 from .schema import load_schema
 
 logger = logging.getLogger(__name__)
@@ -32,6 +33,7 @@ RUN_ID_PATTERN = re.compile(
 )
 
 _UNSAFE_STAR_ID_CHARS = re.compile(r"[^A-Za-z0-9._-]+")
+_MAX_STAGING_STEM = 100
 
 
 @dataclass(frozen=True)
@@ -207,7 +209,8 @@ def _safe_star_id(star_id: str) -> str:
     ``star_id`` reaches this module from a network request and becomes part
     of a path, so separators and traversal segments must not survive.
     """
-    cleaned = _UNSAFE_STAR_ID_CHARS.sub("-", star_id).strip(".-")
+    # Bound the length first: a long id would overflow the filesystem's name limit.
+    cleaned = _UNSAFE_STAR_ID_CHARS.sub("-", star_id)[:_MAX_STAGING_STEM].strip(".-")
     return cleaned or "unknown"
 
 
@@ -222,13 +225,24 @@ def predict_features(
     The rows are staged as one per-star CSV in a temporary directory so that
     :func:`fang.predict.predict_dataset` applies the same strict schema
     validation it applies to files on disk. Extra columns the schema excludes
-    are tolerated and dropped; missing feature columns raise.
+    are tolerated and dropped; missing feature columns raise. A row may not
+    carry a key that names an output column (``fang.predict.ADDED_COLUMNS``,
+    which includes ``star_id``); that raises :class:`DataValidationError`.
+
+    ``model_dir`` is unpickled, so it must be a trusted location.
 
     ``star_id`` is returned as supplied. Only the internal staging filename
-    is sanitised (see :func:`_safe_star_id`), so callers can join on it.
+    is sanitised and bounded (see :func:`_safe_star_id`), so callers can join
+    on it. Every input column is echoed in the records, and a missing value
+    comes back as ``None`` rather than ``NaN`` so the records are JSON-safe.
     """
     if not rows:
         raise EmptyDatasetError("predict_features was given no rows to score.")
+    reserved = sorted({key for row in rows for key in row if key in ADDED_COLUMNS})
+    if reserved:
+        raise DataValidationError(
+            f"Rows carry reserved output columns {reserved}; remove them before scoring."
+        )
     frame = pd.DataFrame(rows)
 
     with tempfile.TemporaryDirectory(prefix="fang-predict-") as staging:
@@ -243,4 +257,5 @@ def predict_features(
     for record in records:
         # The staging filename is sanitised and internal; callers get their own id back.
         record["star_id"] = star_id
-    return records
+    # Callers convert records to protobuf, which cannot carry NaN or infinity.
+    return [_clean(record) for record in records]

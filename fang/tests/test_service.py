@@ -236,17 +236,18 @@ def test_star_id_is_preserved_in_the_output(trained_run, feature_rows):
     assert predictions[0]["star_id"] == "KIC-8120608"
 
 
-def test_excluded_columns_are_accepted_and_ignored(trained_run, feature_rows, schema):
-    """Shaula emits columns no model may see; they must not break prediction."""
+def test_excluded_columns_are_accepted_and_ignored(trained_run, feature_rows):
+    """Shaula emits columns no model may see; they must not change the prediction."""
+    plain = predict_features([dict(row) for row in feature_rows], trained_run)
+
     rows = [dict(row) for row in feature_rows]
     for row in rows:
         row["t0"] = 131.5
         row["mes_threshold_used"] = 7.1
         row["duration_days"] = 0.12
+    with_extras = predict_features(rows, trained_run)
 
-    predictions = predict_features(rows, trained_run)
-    assert len(predictions) == 2
-    assert all(c not in schema.feature_columns for c in ("t0", "mes_threshold_used"))
+    assert [p["prob_stack"] for p in with_extras] == [p["prob_stack"] for p in plain]
 
 
 def test_missing_feature_column_raises_naming_it(trained_run, feature_rows):
@@ -419,3 +420,63 @@ def test_non_run_id_directory_is_logged_at_debug_not_warning(tmp_path, caplog):
     records = [r for r in caplog.records if "latest" in r.getMessage()]
     assert records
     assert all(r.levelname == "DEBUG" for r in records)
+
+
+@pytest.mark.parametrize("reserved", ["star_id", "prob_stack", "source_file", "row_index"])
+def test_row_carrying_a_reserved_output_column_is_rejected(trained_run, feature_rows, reserved):
+    """Feeding a previous prediction back in used to die with a bare ValueError."""
+    rows = [dict(row) for row in feature_rows]
+    rows[0][reserved] = "x"
+
+    with pytest.raises(DataValidationError, match=reserved):
+        predict_features(rows, trained_run)
+
+
+def test_very_long_star_id_is_scored_and_returned_unchanged(trained_run, feature_rows):
+    long_id = "K" * 400
+
+    predictions = predict_features(feature_rows, trained_run, star_id=long_id)
+
+    assert {p["star_id"] for p in predictions} == {long_id}
+
+
+def test_star_id_that_sanitises_to_nothing_stages_under_the_fallback_name(
+    trained_run, feature_rows, monkeypatch
+):
+    staged: list[Path] = []
+    real_to_csv = pd.DataFrame.to_csv
+
+    def spy(self, path_or_buf=None, *args, **kwargs):
+        staged.append(Path(path_or_buf))
+        return real_to_csv(self, path_or_buf, *args, **kwargs)
+
+    monkeypatch.setattr(pd.DataFrame, "to_csv", spy)
+
+    predictions = predict_features(feature_rows, trained_run, star_id="../..")
+
+    assert {p["star_id"] for p in predictions} == {"../.."}
+    assert len(staged) == 1
+    assert staged[0].name.startswith("unknown_")
+
+
+def test_truncated_star_id_never_ends_with_a_separator():
+    assert _safe_star_id("a" * 99 + "-" + "b" * 50) == "a" * 99
+    assert _safe_star_id("-" * 400) == "unknown"
+
+
+def test_missing_features_come_back_as_none_and_records_are_json_safe(
+    trained_run, feature_rows, schema
+):
+    """The gRPC layer converts records to protobuf Struct, which rejects NaN."""
+    missing = schema.feature_columns[0]
+    rows = [dict(row) for row in feature_rows]
+    rows[0][missing] = float("nan")
+
+    predictions = predict_features(rows, trained_run)
+
+    assert predictions[0][missing] is None
+    assert predictions[1][missing] == 2.0
+    for record in predictions:
+        json.dumps(record, allow_nan=False)
+        assert isinstance(record["prob_stack"], float)
+        assert 0.0 <= record["prob_stack"] <= 1.0

@@ -130,6 +130,8 @@ intervals.
 
 Run `20260824T181710Z-256238b4`, seed 42, schema version 1.
 
+Models trained before the rename (when the import name was `src`) cannot be loaded and must be retrained.
+
 ### Training set
 
 | | |

@@ -237,6 +237,9 @@ evaluation/                     nested-CV metrics, OOF predictions,
                                 permutation importance, and plots
 ```
 
+Models trained before the rename (when the import name was `src`) cannot be
+loaded and must be retrained.
+
 Bundles are Joblib pickles: load only bundles produced by your own pipeline,
 from a location you trust.
 

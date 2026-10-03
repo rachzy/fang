@@ -325,3 +325,16 @@ def test_star_id_that_sanitises_to_nothing_falls_back():
 
 def test_ordinary_star_id_survives_sanitisation_recognisably():
     assert _safe_star_id("KIC 8120608") == "KIC-8120608"
+
+
+@pytest.mark.parametrize("missing", [float("nan"), None], ids=["nan", "none"])
+def test_single_star_request_with_a_missing_feature_is_scored(
+    trained_run, feature_rows, schema, missing
+):
+    """A lone star's missing feature must not fail the request."""
+    row = dict(feature_rows[0])
+    row[schema.feature_columns[0]] = missing
+
+    predictions = predict_features([row], trained_run)
+
+    assert len(predictions) == 1

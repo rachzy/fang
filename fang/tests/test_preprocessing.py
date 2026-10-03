@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from src.preprocessing import DropDegenerateFeatures, build_preprocessor
+from fang.preprocessing import DropDegenerateFeatures, build_preprocessor
 
 
 def test_drops_constant_and_all_nan_columns():

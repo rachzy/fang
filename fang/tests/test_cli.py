@@ -1,4 +1,4 @@
-"""The exoplanet-ml command line surface."""
+"""The fang command line surface."""
 
 from __future__ import annotations
 
@@ -11,8 +11,8 @@ import pytest
 import yaml
 from typer.testing import CliRunner
 
-from src import __version__
-from src.cli import app
+from fang import __version__
+from fang.cli import app
 
 runner = CliRunner()
 
@@ -79,7 +79,7 @@ def test_validate_rejects_unlabelled_data_in_train_mode(predict_dir):
 
 
 def test_validate_reports_reliability_counts(train_dir, schema):
-    from src.data import load_dataset
+    from fang.data import load_dataset
 
     dataset = load_dataset(train_dir, mode="train", schema=schema)
     result = run("validate", "--data-dir", str(train_dir), "--mode", "train")

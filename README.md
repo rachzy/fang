@@ -1,4 +1,4 @@
-# transit-exoplanet-ml
+# Fang
 
 A reproducible screening model for transit exoplanet candidates. It validates
 processed per-star candidate tables, compares six star-grouped classifiers under
@@ -17,7 +17,7 @@ committed `uv.lock`. It targets CPython 3.14 and supports 3.11 – 3.14.
 
 ```bash
 uv sync
-uv run exoplanet-ml --help
+uv run fang --help
 ```
 
 Installation and the test suite do not depend on `data/` being populated.
@@ -48,7 +48,7 @@ holds for the accepted-only meta-model fit.
 
 ### Feature allowlist
 
-The schema in [`src/resources/schema.yaml`](src/resources/schema.yaml)
+The schema in [`fang/resources/schema.yaml`](fang/resources/schema.yaml)
 is versioned and strict: exactly 36 columns reach a model. Everything else in
 the CSVs is withheld, for a stated reason:
 
@@ -66,17 +66,17 @@ refuse to load against a schema they were not trained on.
 
 ```bash
 # 1. Check a directory against the contract
-uv run exoplanet-ml validate --mode train   --data-dir data/processed/train
-uv run exoplanet-ml validate --mode predict --data-dir data/processed/test
+uv run fang validate --mode train   --data-dir data/processed/train
+uv run fang validate --mode predict --data-dir data/processed/test
 
 # 2. Nested, star-grouped evaluation
-uv run exoplanet-ml evaluate --data-dir data/processed/train --output-dir reports/nested-cv
+uv run fang evaluate --data-dir data/processed/train --output-dir reports/nested-cv
 
 # 3. Train every candidate, ship the best, into an immutable run directory
-uv run exoplanet-ml train --data-dir data/processed/train --artifact-dir models
+uv run fang train --data-dir data/processed/train --artifact-dir models
 
 # 4. Score unseen stars
-uv run exoplanet-ml predict \
+uv run fang predict \
     --model-dir models/<run-id> \
     --data-dir data/processed/test \
     --output predictions.csv
@@ -128,7 +128,7 @@ output is byte-stable across runs.
 ## Python API
 
 ```python
-from src import (
+from fang import (
     load_dataset, validate_dataset, evaluate_dataset,
     train_model, load_model, predict_dataset,
 )
@@ -237,14 +237,17 @@ evaluation/                     nested-CV metrics, OOF predictions,
                                 permutation importance, and plots
 ```
 
+Models trained before the rename (when the import name was `src`) cannot be
+loaded and must be retrained.
+
 Bundles are Joblib pickles: load only bundles produced by your own pipeline,
 from a location you trust.
 
 ## Development
 
 ```bash
-uv run pytest              # 173 tests, no repository data required
-uv run ruff check src
+uv run pytest              # the test suite, no repository data required
+uv run ruff check fang
 uv run coverage run -m pytest && uv run coverage report
 ```
 

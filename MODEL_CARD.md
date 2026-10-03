@@ -4,8 +4,8 @@
 
 |                   |                                                                                  |
 | ----------------- | -------------------------------------------------------------------------------- |
-| **Name**          | transit-exoplanet-ml candidate screener                                          |
-| **Version**       | 0.1.0 (feature schema version 1)                                                 |
+| **Name**          | Fang candidate screener                                                          |
+| **Version**       | 0.0.1a0 (feature schema version 1)                                               |
 | **Type**          | Stacked binary classifier                                                        |
 | **Base learners** | LightGBM, ExtraTrees (500 trees), RBF SVM (Platt-scaled), L2 logistic regression |
 | **Meta-learner**  | L2 logistic regression, `C` selected by grouped inner CV                         |
@@ -129,6 +129,8 @@ intervals.
 ## Results
 
 Run `20260824T181710Z-256238b4`, seed 42, schema version 1.
+
+Models trained before the rename (when the import name was `src`) cannot be loaded and must be retrained.
 
 ### Training set
 

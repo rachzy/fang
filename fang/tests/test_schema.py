@@ -5,9 +5,9 @@ from __future__ import annotations
 import pytest
 import yaml
 
-from src.data import load_dataset
-from src.errors import ConfigError
-from src.schema import load_schema
+from fang.data import load_dataset
+from fang.errors import ConfigError
+from fang.schema import load_schema
 
 WITHHELD = {
     "supervision": ["candidate_label", "detection_status", "matched_target",

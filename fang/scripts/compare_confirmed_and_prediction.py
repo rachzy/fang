@@ -16,9 +16,9 @@ the model cannot be graded on a candidate it was never shown.
 
 Usage (with the project venv active)::
 
-    python src/scripts/compare_confirmed_and_prediction.py
-    python src/scripts/compare_confirmed_and_prediction.py --predictions runs/p.csv
-    python src/scripts/compare_confirmed_and_prediction.py --threshold 0.5
+    python -m fang.scripts.compare_confirmed_and_prediction
+    python -m fang.scripts.compare_confirmed_and_prediction --predictions runs/p.csv
+    python -m fang.scripts.compare_confirmed_and_prediction --threshold 0.5
 """
 
 from __future__ import annotations
@@ -30,20 +30,15 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-THIS_DIR = Path(__file__).resolve().parent
-SRC_DIR = THIS_DIR.parent
-REPO_ROOT = SRC_DIR.parent
-
-if str(SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(SRC_DIR))
-
-from utils.compare_extracted_confirmed import (  # noqa: E402
+from ..utils.compare_extracted_confirmed import (
     PERIOD_MATCH_TOLERANCE,
     _is_confirmed_stem_for,
     match_candidate_rows,
 )
 
-# Mirrors src/training.POTENTIAL: importing it would pull the whole modelling
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+# Mirrors fang/training.POTENTIAL: importing it would pull the whole modelling
 # stack in just to read one string.
 POTENTIAL = "POTENTIAL"
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from src.metrics import (
+from fang.metrics import (
     calibration_curve_points,
     compute_metrics,
     per_star_summary,

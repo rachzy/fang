@@ -285,7 +285,12 @@ def load_dataset(
             "upstream; NaN is imputed inside the model folds, infinities are not accepted."
         )
 
-    empty = [c for c in features.columns if bool(features[c].isna().all())]
+    # Only training needs observed values; a lone star at prediction time may lack a feature.
+    empty = (
+        [c for c in features.columns if bool(features[c].isna().all())]
+        if mode == "train"
+        else []
+    )
     if empty:
         errors.append(
             f"Features {empty} are entirely empty across the dataset. Populate them or "

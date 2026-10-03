@@ -5,11 +5,11 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from src.config import load_config
-from src.data import load_dataset
-from src.errors import ConfigError, DataDiversityError
-from src.stacking import STACK, fit_stack, select_best_model
-from src.training import train_model
+from fang.config import load_config
+from fang.data import load_dataset
+from fang.errors import ConfigError, DataDiversityError
+from fang.stacking import STACK, fit_stack, select_best_model
+from fang.training import train_model
 
 
 # ---------------------------------------------------------------------------
@@ -150,7 +150,7 @@ def test_selecting_an_unfitted_model_is_rejected(dataset, fast_config):
 
 def test_ranked_breaks_ties_the_same_way_select_best_model_does():
     """A tied score must not make ranked[0] disagree with selected_model."""
-    from src.training import SelectionRecord
+    from fang.training import SelectionRecord
 
     record = SelectionRecord(
         selected_model="lightgbm",

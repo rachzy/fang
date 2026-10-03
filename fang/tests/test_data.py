@@ -9,14 +9,14 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.data import (
+from fang.data import (
     load_dataset,
     parse_source_filename,
     star_balanced_weights,
     validate_dataset,
 )
-from src.errors import DataValidationError, EmptyDatasetError
-from src.tests.conftest import write_synthetic_dataset
+from fang.errors import DataValidationError, EmptyDatasetError
+from fang.tests.conftest import write_synthetic_dataset
 
 
 # ---------------------------------------------------------------------------
@@ -283,3 +283,15 @@ def test_validate_dataset_returns_summary(train_dir, schema):
     assert summary["n_positive"] > 0
     assert summary["n_negative"] > 0
     assert summary["status_counts"]["rejected"] > 0
+
+
+def test_predict_mode_accepts_a_single_star_with_an_all_nan_feature(tmp_path, schema):
+    """One star can legitimately lack a feature; imputers are fitted at training time."""
+    write_synthetic_dataset(tmp_path, n_stars=1, seed=11, include_supervision=False)
+    for path in tmp_path.glob("*.csv"):
+        frame = pd.read_csv(path)
+        frame["vshape_metric"] = np.nan
+        frame.to_csv(path, index=False)
+
+    dataset = load_dataset(tmp_path, mode="predict", schema=schema)
+    assert len(dataset) > 0

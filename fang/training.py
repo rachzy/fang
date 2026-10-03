@@ -212,7 +212,15 @@ class ModelBundle:
                 f"No model bundle at {source}. Point --model-dir at a directory "
                 f"containing {BUNDLE_FILENAME}."
             )
-        payload = joblib.load(source)
+        try:
+            payload = joblib.load(source)
+        except ModuleNotFoundError as error:
+            if error.name == "src" or (error.name or "").startswith("src."):
+                raise SchemaVersionError(
+                    f"{source} was trained by the pre-rename package (import name "
+                    "'src') and cannot be loaded; retrain it with fang."
+                ) from error
+            raise
 
         found = int(payload.get("bundle_format_version", -1))
         if found != BUNDLE_FORMAT_VERSION:

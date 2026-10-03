@@ -13,8 +13,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.config import Config, load_config
-from src.schema import FeatureSchema, load_schema
+from fang.config import Config, load_config
+from fang.schema import FeatureSchema, load_schema
 
 # Features that carry real signal in the synthetic data; the rest are noise.
 SIGNAL_FEATURES = ("snr_global", "MES", "max_mes", "depth_stability", "vshape_metric")

@@ -246,7 +246,7 @@ from a location you trust.
 ## Development
 
 ```bash
-uv run pytest              # 173 tests, no repository data required
+uv run pytest              # the test suite, no repository data required
 uv run ruff check fang
 uv run coverage run -m pytest && uv run coverage report
 ```

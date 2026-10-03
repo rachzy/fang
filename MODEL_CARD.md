@@ -5,7 +5,7 @@
 |                   |                                                                                  |
 | ----------------- | -------------------------------------------------------------------------------- |
 | **Name**          | Fang candidate screener                                                          |
-| **Version**       | 0.1.0 (feature schema version 1)                                                 |
+| **Version**       | 0.0.1a0 (feature schema version 1)                                               |
 | **Type**          | Stacked binary classifier                                                        |
 | **Base learners** | LightGBM, ExtraTrees (500 trees), RBF SVM (Platt-scaled), L2 logistic regression |
 | **Meta-learner**  | L2 logistic regression, `C` selected by grouped inner CV                         |

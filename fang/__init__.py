@@ -26,7 +26,7 @@ from .schema import FeatureSchema, load_schema
 from .service import RunInfo, latest_run, list_runs, predict_features
 from .training import ModelBundle, load_model, train_model
 
-__version__ = "0.1.0"
+__version__ = "0.0.1a0"
 
 __all__ = [
     "Config",

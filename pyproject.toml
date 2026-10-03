@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fang"
-version = "0.1.0"
+version = "0.0.1a0"
 description = "Star-grouped stacked classifier for screening transit exoplanet candidates"
 readme = "README.md"
 license = { file = "LICENSE" }

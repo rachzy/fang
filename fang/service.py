@@ -21,6 +21,7 @@ import yaml
 
 from .errors import EmptyDatasetError
 from .predict import predict_dataset
+from .schema import load_schema
 
 logger = logging.getLogger(__name__)
 
@@ -99,9 +100,13 @@ def list_runs(artifact_dir: Path | str = "models") -> list[RunInfo]:
     """Every trained run under ``artifact_dir`` that is safe to serve, newest first.
 
     A run qualifies when it has a bundle, a run id this build recognises, and
-    readable sidecars carrying a numeric threshold and schema version.
-    Everything else is skipped (malformed sidecars warn; sidecars that are
-    not written yet are logged at debug): a hand-named directory such as
+    readable sidecars carrying a numeric threshold in ``[0, 1]`` (both ends
+    valid) and a schema version in ``[1, 2**31)`` that equals the installed
+    schema's, so a listed run is one ``load_model`` will accept and whose
+    fields fit an int32. Everything else is skipped (malformed or
+    out-of-range sidecars warn; sidecars that are not written yet, and
+    directories whose name is not a run id, are logged at debug): a
+    hand-named directory such as
     ``models/latest`` would otherwise sort above every timestamped id and
     become the newest run, and a truncated sidecar would otherwise be served
     as ``threshold=0.0``, a legitimate value that classifies every candidate
@@ -112,6 +117,7 @@ def list_runs(artifact_dir: Path | str = "models") -> list[RunInfo]:
     if not base.is_dir():
         return []
 
+    installed_version = load_schema().schema_version
     runs: list[RunInfo] = []
     for directory in sorted(base.iterdir(), reverse=True):
         if not directory.is_dir() or not (directory / BUNDLE_FILENAME).is_file():
@@ -119,7 +125,7 @@ def list_runs(artifact_dir: Path | str = "models") -> list[RunInfo]:
 
         created_at = _created_at_from_run_id(directory.name)
         if not created_at:
-            logger.warning("Skipping %s: not a run id this build recognises.", directory)
+            logger.debug("Skipping %s: not a run id this build recognises.", directory)
             continue
 
         schema_path = directory / "feature_schema.yaml"
@@ -144,6 +150,27 @@ def list_runs(artifact_dir: Path | str = "models") -> list[RunInfo]:
 
         if not isinstance(selected_model, str) or not selected_model:
             logger.warning("Skipping %s: selected_model is missing or empty.", directory)
+            continue
+
+        if not 0.0 <= decision_threshold <= 1.0:
+            logger.warning(
+                "Skipping %s: threshold %s is outside [0, 1].", directory, decision_threshold
+            )
+            continue
+
+        if not 1 <= schema_version < 2**31:
+            logger.warning(
+                "Skipping %s: schema_version %s is outside [1, 2**31).", directory, schema_version
+            )
+            continue
+
+        if schema_version != installed_version:
+            logger.warning(
+                "Skipping %s: schema_version %s does not match the installed schema (%s).",
+                directory,
+                schema_version,
+                installed_version,
+            )
             continue
 
         runs.append(

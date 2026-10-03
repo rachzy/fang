@@ -49,14 +49,21 @@ def test_created_at_is_derived_from_the_run_id(tmp_path):
 
 
 def test_runs_are_returned_newest_first(tmp_path):
-    _write_run(tmp_path, "20260101T000000Z-aaaaaaaa")
-    _write_run(tmp_path, "20261231T235959Z-bbbbbbbb")
-    _write_run(tmp_path, "20260615T120000Z-cccccccc")
+    """Full ids, including two on the same day, so the time of day decides the order."""
+    ids = [
+        "20260101T000000Z-aaaaaaaa",
+        "20261231T235959Z-bbbbbbbb",
+        "20260615T120000Z-aaaaaaaa",
+        "20260615T130000Z-bbbbbbbb",
+    ]
+    for run_id in ids:
+        _write_run(tmp_path, run_id)
 
-    assert [r.run_id[:8] for r in list_runs(tmp_path)] == [
-        "20261231",
-        "20260615",
-        "20260101",
+    assert [r.run_id for r in list_runs(tmp_path)] == [
+        "20261231T235959Z-bbbbbbbb",
+        "20260615T130000Z-bbbbbbbb",
+        "20260615T120000Z-aaaaaaaa",
+        "20260101T000000Z-aaaaaaaa",
     ]
 
 
@@ -338,3 +345,77 @@ def test_single_star_request_with_a_missing_feature_is_scored(
     predictions = predict_features([row], trained_run)
 
     assert len(predictions) == 1
+
+
+GOOD_RUN = "20260101T000000Z-aaaaaaaa"
+BAD_RUN = "20261231T235959Z-bbbbbbbb"
+
+
+@pytest.mark.parametrize("schema_version", [2**40, -3, 0, 2**31])
+def test_schema_version_outside_int32_range_is_skipped(tmp_path, schema_version):
+    """RunInfo.schema_version is an int32 on the wire; one bad run must not break the list."""
+    _write_run(tmp_path, GOOD_RUN)
+    _write_run(tmp_path, BAD_RUN, schema_version=schema_version)
+
+    assert [r.run_id for r in list_runs(tmp_path)] == [GOOD_RUN]
+
+
+@pytest.mark.parametrize("threshold", [7.5, -1.0])
+def test_threshold_outside_unit_interval_is_skipped(tmp_path, threshold):
+    _write_run(tmp_path, GOOD_RUN)
+    _write_run(tmp_path, BAD_RUN, threshold=threshold)
+
+    assert [r.run_id for r in list_runs(tmp_path)] == [GOOD_RUN]
+
+
+@pytest.mark.parametrize("threshold", [0.0, 1.0])
+def test_threshold_boundaries_are_listed(tmp_path, threshold):
+    _write_run(tmp_path, BAD_RUN, threshold=threshold)
+
+    assert [r.threshold for r in list_runs(tmp_path)] == [threshold]
+
+
+def test_run_for_a_different_schema_version_is_skipped(tmp_path):
+    """Uses the real installed schema (version 1): load_model would refuse version 2."""
+    _write_run(tmp_path, GOOD_RUN)
+    _write_run(tmp_path, BAD_RUN, schema_version=2)
+
+    assert [r.run_id for r in list_runs(tmp_path)] == [GOOD_RUN]
+
+
+def test_installed_schema_is_read_once_per_listing(tmp_path, monkeypatch):
+    from .. import service
+
+    calls = []
+    real = service.load_schema
+
+    def counting():
+        calls.append(1)
+        return real()
+
+    monkeypatch.setattr(service, "load_schema", counting)
+    _write_run(tmp_path, GOOD_RUN)
+    _write_run(tmp_path, BAD_RUN)
+
+    list_runs(tmp_path)
+    assert len(calls) == 1
+
+
+def test_skipped_runs_are_named_in_a_warning(tmp_path, caplog):
+    _write_run(tmp_path, BAD_RUN, threshold=7.5)
+
+    with caplog.at_level("WARNING"):
+        list_runs(tmp_path)
+
+    assert BAD_RUN in caplog.text
+
+
+def test_non_run_id_directory_is_logged_at_debug_not_warning(tmp_path, caplog):
+    _write_run(tmp_path, "latest")
+
+    with caplog.at_level("DEBUG"):
+        list_runs(tmp_path)
+
+    records = [r for r in caplog.records if "latest" in r.getMessage()]
+    assert records
+    assert all(r.levelname == "DEBUG" for r in records)

@@ -4,15 +4,6 @@ Star-grouped stacked classifier that screens transit exoplanet candidates. Forme
 The package, the distribution and the CLI command are all named `fang` (the import name used to be `src`).
 Its output, `potential_probability`, is a screening score learned from literature labels, not a confirmation.
 
-## Commands
-
-- `uv sync` - install dependencies
-- `uv run pytest` - test suite. The module-scoped `trained_run` fixture in `fang/tests/test_service.py` trains
-  one small real model (about a second); the slow tests are the `evaluate` tests in `test_cli.py`.
-- `uv run ruff check fang` - passes clean today; new code must keep it clean
-- `uv run fang --help` - CLI: `validate`, `evaluate`, `train`, `predict`
-- `make help` lists the Makefile targets (`test`, `lint`, `train`, `predict`, `full-pipeline`, ...)
-
 ## Layout
 
 - `fang/` - library and CLI (`cli.py`); tests live in `fang/tests/`
@@ -25,25 +16,8 @@ Its output, `potential_probability`, is a screening score learned from literatur
 
 ## Training data
 
-- **Source.** Almost all of `data/processed/` is produced by Shaula (`rachzy/shaula`), the upstream detection and
-  feature-extraction pipeline: it finds transit candidates in Kepler light curves and computes their features.
-  fang does no light-curve processing or downloading; it consumes Shaula's tables as they are.
-- **Shape.** One CSV per star, named `<star-name>_<YYYYMMDD>.csv`; everything before the last underscore is the
-  `star_id`. One row per candidate signal. Today: 35 Kepler systems in `train/`, 10 in `test/`, a few hundred
-  candidates, so every metric is noisy.
-- **Columns.** 36 numeric features reach a model (`feature_columns` in `schema.yaml`): orbital and transit shape
-  (`period_days`, `duration_hours`, `vshape_metric`, `ingress_egress_asymmetry`), signal strength (`MES`, `SES_*`,
-  `snr_global`, `cdpp_*`), noise and autocorrelation (`local_noise`, `acf_lag_*`), false-positive diagnostics
-  (`secondary_depth*`, `odd_even_depth_ratio`) and `planet_radius_rearth`. Everything else Shaula emits is listed
-  under `excluded_columns` with the reason (labels, pipeline settings, `t0`, unit-converted aliases); an unknown
-  column is rejected until the schema is updated.
-- **Labels.** `candidate_label` maps `CONFIRMED -> 1`, `FALSE-POSITIVE -> 0`, from the literature cross-match.
-  `detection_status` (`accepted`, `rejected`, `provisional`, `harmonic_duplicate`) is Shaula's own verdict and is
-  never a feature. The classes are imbalanced towards confirmed planets; the ratio of FP to TP is a known weak point.
-- **Reliability.** A row is "reliable" when `MES >= mes_threshold_used`. Unreliable rows still train base learners
-  but are kept out of meta-model fitting, threshold selection and reported metrics
-  (`objective.exclude_unreliable_from_threshold`).
-- `NaN` is allowed and imputed inside folds; infinities, duplicate rows and empty features are rejected at load.
+See [docs/training-data.md](docs/training-data.md): source (mostly Shaula, `rachzy/shaula`), file layout,
+features, labels and the reliability rule.
 
 ## The model
 
@@ -87,10 +61,6 @@ regression as active base learners).
 
 ## Contracts
 
-- **Service surface.** The Antares `apps/fang` gRPC service imports `predict_features()`, `list_runs()` and
-  `latest_run()` from `fang/service.py`. Changing their signatures is a breaking change for that service.
-  `predict_features` returns the caller's `star_id` as supplied; only the internal staging filename is sanitised.
-  It returns `None` for missing values (callers convert records to protobuf, which cannot carry `NaN`).
 - **`list_runs()` only returns runs that are safe to serve**: bundle present, run id matching
   `RUN_ID_PATTERN`, sidecars parsing to mappings with a finite numeric threshold, a numeric schema version
   and a non-empty `selected_model`; it also range-checks sidecar values (threshold in [0, 1], int32

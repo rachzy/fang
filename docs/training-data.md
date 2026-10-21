@@ -18,8 +18,8 @@
   column is rejected until the schema is updated.
 - **Labels.** `candidate_label` maps `CONFIRMED -> 1`, `FALSE-POSITIVE -> 0`, from the literature cross-match.
   `detection_status` (`accepted`, `rejected`, `provisional`, `harmonic_duplicate`) is Shaula's own verdict and is
-  never a feature. The classes are imbalanced towards confirmed planets; the ratio of FP to TP is a known weak point.
-- **Reliability.** A row is "reliable" when `MES >= mes_threshold_used`. Unreliable rows still train base learners
-  but are kept out of meta-model fitting, threshold selection and reported metrics
-  (`objective.exclude_unreliable_from_threshold`).
+  never a feature. The KIC dataset is imbalanced towards false positives (about 6:1); the ratio of FP to TP is a known weak point.
+- Every labelled row feeds base learners, the meta-model, threshold selection and reported metrics alike, because
+  `predict` scores every row too. An earlier rule that dropped rows below `mes_threshold_used` from the meta stage
+  was removed once those rows turned out to be almost all false positives.
 - `NaN` is allowed and imputed inside folds; infinities, duplicate rows and empty features are rejected at load.

@@ -17,7 +17,7 @@ Its output, `potential_probability`, is a screening score learned from literatur
 ## Training data
 
 See [docs/training-data.md](docs/training-data.md): source (mostly Shaula, `rachzy/shaula`), file layout,
-features, labels and the reliability rule.
+features and labels.
 
 ## The model
 
@@ -37,7 +37,7 @@ regression as active base learners).
 - **Tuning.** Seeded (`seed: 42`), deterministic sampling of `n_candidates` from each grid, scored by inner grouped
   CV on `objective.metric` (average precision).
 - **Threshold.** Per model, the highest-precision threshold that keeps recall >= `objective.min_recall` (0.95) on
-  cross-fitted reliable rows.
+  cross-fitted training rows.
 - **Selection** (`training.py`, `choose_model`): every candidate (`stack` and each base learner) is fitted and kept
   in the bundle; the best average precision among those meeting the recall floor ships as `selected_model`.
   In recent nested evaluations the stack scores below the best gradient-boosted learner; making it outperform them

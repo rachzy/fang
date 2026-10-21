@@ -79,18 +79,6 @@ def test_invalid_selection_config_is_rejected(patch, match):
         load_config().with_overrides({"selection": patch})
 
 
-def test_unreliable_rows_are_excluded_from_the_threshold_by_default():
-    config = load_config()
-    assert config.exclude_unreliable_from_threshold is True
-
-
-def test_excluding_unreliable_rows_from_the_threshold_can_be_disabled():
-    config = load_config().with_overrides(
-        {"objective": {"exclude_unreliable_from_threshold": False}}
-    )
-    assert config.exclude_unreliable_from_threshold is False
-
-
 # ---------------------------------------------------------------------------
 # End-to-end selection
 # ---------------------------------------------------------------------------

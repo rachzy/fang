@@ -51,7 +51,8 @@ replace vetting, follow-up observation, or peer review.
 ## Training data
 
 Processed per-star candidate tables under `data/processed/train/`, one CSV per
-star, named `<star-name>_<YYYYMMDD>.csv`. Each row is one candidate.
+star, named `<star-name>_<YYYYMMDD>.csv`, plus optional `_inverted_` augmented copies that share the
+star's id. Each row is one candidate.
 
 Two independent axes are used:
 

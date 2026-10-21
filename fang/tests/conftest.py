@@ -97,6 +97,9 @@ def build_synthetic_frame(
     frame["matched_period_ratio"] = [
         "direct" if label == "CONFIRMED" else None for label in labels
     ]
+    frame["fp_source"] = [
+        "direct" if label == "CONFIRMED" else "unmatched" for label in labels
+    ]
     if star_index == 0:
         # One row with no signal statistic at all: the pipeline's detection
         # step never completed for it, distinct from "weak but present".

@@ -26,16 +26,20 @@ Installation and the test suite do not depend on `data/` being populated.
 
 Each file holds the candidates for exactly one star and is named
 `<star-name>_<YYYYMMDD>.csv`. Everything before the **final** underscore is the
-`star_id`, so star names may contain underscores themselves.
+`star_id`, so star names may contain underscores themselves. An augmented copy
+named `<star-name>_inverted_<YYYYMMDD>.csv` shares its star's `star_id`, and
+`<star-name>-koi.csv` KOI catalogue files are ignored.
 
 | Rule | Behaviour |
 | --- | --- |
 | Malformed filename | rejected |
-| Two files for one star in a dataset | rejected |
+| Two files for one star (or variant) in a dataset | rejected |
+| Blank or header-only file | skipped, counted as a star without candidates |
 | Unknown column | rejected until the schema is explicitly updated |
 | Missing feature column | rejected |
 | `candidate_label` / `detection_status` | required for `train`, optional for `predict` |
 | Invalid label or status value | rejected |
+| `UNKNOWN` label | dropped for `train`, scored for `predict` |
 | Duplicate candidate rows in a file | rejected |
 | Infinite values | rejected |
 | Feature empty across the whole dataset | rejected |

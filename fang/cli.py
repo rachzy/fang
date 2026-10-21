@@ -107,6 +107,11 @@ def validate(
     _echo(f"  schema version : {summary['schema_version']}")
     _echo(f"  files / stars  : {summary['n_files']} / {summary['n_stars']}")
     _echo(f"  candidate rows : {summary['n_rows']}")
+    if summary["n_files_without_candidates"]:
+        _echo(f"  no candidates  : {summary['n_files_without_candidates']} files skipped")
+    if summary["n_unlabelled"]:
+        verb = "dropped" if mode == "train" else "kept"
+        _echo(f"  unlabelled     : {summary['n_unlabelled']} rows {verb}")
     _echo(f"  model features : {summary['n_features']}")
     if "n_positive" in summary:
         _echo(

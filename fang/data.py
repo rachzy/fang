@@ -21,6 +21,14 @@ MODES = ("train", "predict")
 
 PROVENANCE_COLUMNS = ("source_file", "star_id", "row_index")
 
+# Shaula writes the star's KOI catalogue rows next to its candidates; they are
+# reference data, not candidates.
+CATALOGUE_SUFFIX = "-koi.csv"
+
+# Augmented copies of a star's light curve, e.g. ``<star>_inverted_<date>.csv``.
+# They share the star id so star-grouped folds never split a star from its copy.
+AUGMENTED_VARIANTS = ("inverted",)
+
 
 # ---------------------------------------------------------------------------
 # Filenames
@@ -29,8 +37,22 @@ def parse_source_filename(filename: str) -> tuple[str, dt.date]:
     """Split ``<star-name>_<YYYYMMDD>.csv`` into its star id and date.
 
     Everything before the final underscore is the star id, so star names may
-    themselves contain underscores.
+    themselves contain underscores. An augmented variant suffix such as
+    ``_inverted`` is not part of the star id.
     """
+    star_id, _, date = _parse_source_filename(filename)
+    return star_id, date
+
+
+def _split_variant(star_id: str) -> tuple[str, str | None]:
+    for variant in AUGMENTED_VARIANTS:
+        suffix = f"_{variant}"
+        if star_id.endswith(suffix) and len(star_id) > len(suffix):
+            return star_id[: -len(suffix)], variant
+    return star_id, None
+
+
+def _parse_source_filename(filename: str) -> tuple[str, str | None, dt.date]:
     name = Path(filename).name
     if not name.lower().endswith(".csv"):
         raise DataValidationError(
@@ -53,7 +75,8 @@ def parse_source_filename(filename: str) -> tuple[str, dt.date]:
         raise DataValidationError(
             f"{name!r}: {raw_date!r} is not a valid YYYYMMDD calendar date."
         ) from exc
-    return star_id, date
+    star_id, variant = _split_variant(star_id)
+    return star_id, variant, date
 
 
 def discover_files(data_dir: str | Path) -> list[Path]:
@@ -66,7 +89,13 @@ def discover_files(data_dir: str | Path) -> list[Path]:
         )
     if not directory.is_dir():
         raise EmptyDatasetError(f"Not a directory: {directory}.")
-    files = sorted(p for p in directory.iterdir() if p.is_file() and p.suffix.lower() == ".csv")
+    files = sorted(
+        p
+        for p in directory.iterdir()
+        if p.is_file()
+        and p.suffix.lower() == ".csv"
+        and not p.name.lower().endswith(CATALOGUE_SUFFIX)
+    )
     if not files:
         raise EmptyDatasetError(
             f"No candidate CSV files found in {directory}. Add at least one "
@@ -114,6 +143,8 @@ class Dataset:
     y: np.ndarray | None = None
     status: np.ndarray | None = None
     reliable: np.ndarray | None = None
+    n_unlabelled: int = 0
+    n_files_without_candidates: int = 0
 
     def __len__(self) -> int:
         return len(self.frame)
@@ -147,6 +178,8 @@ class Dataset:
             "n_stars": len(self.stars),
             "n_files": len(self.files),
             "n_features": len(self.features.columns),
+            "n_files_without_candidates": self.n_files_without_candidates,
+            "n_unlabelled": self.n_unlabelled,
             "stars": list(self.stars),
         }
         if self.y is not None:
@@ -195,22 +228,25 @@ def load_dataset(
     files = discover_files(data_dir)
     errors: list[str] = []
 
-    # -- filenames and one-file-per-star ------------------------------------
+    # -- filenames and one-file-per-star-and-variant -------------------------
     stars_by_file: dict[Path, str] = {}
-    seen: dict[str, Path] = {}
+    seen: dict[tuple[str, str | None], Path] = {}
     for path in files:
         try:
-            star_id, _ = parse_source_filename(path.name)
+            star_id, variant, _ = _parse_source_filename(path.name)
         except DataValidationError as exc:
             errors.append(str(exc))
             continue
-        if star_id in seen:
+        key = (star_id, variant)
+        if key in seen:
+            kind = f"{variant} " if variant else ""
             errors.append(
-                f"Star {star_id!r} appears in multiple files ({seen[star_id].name} and "
-                f"{path.name}). Keep exactly one file per star in a dataset."
+                f"Star {star_id!r} appears in multiple {kind}files ({seen[key].name} and "
+                f"{path.name}). Keep exactly one file per star (plus one per augmented "
+                "variant) in a dataset."
             )
             continue
-        seen[star_id] = path
+        seen[key] = path
         stars_by_file[path] = star_id
     _fail(errors)
 
@@ -218,17 +254,21 @@ def load_dataset(
     known = set(schema.known_columns)
     required = set(schema.required_for(mode))
     frames: list[pd.DataFrame] = []
+    n_without_candidates = 0
 
     for path in files:
         star_id = stars_by_file[path]
         try:
             raw = pd.read_csv(path)
+        except pd.errors.EmptyDataError:
+            raw = pd.DataFrame()
         except Exception as exc:  # pragma: no cover - pandas surfaces many types
             errors.append(f"{path.name}: could not be parsed as CSV ({exc}).")
             continue
 
+        # Shaula writes a blank or header-only file when a star has no candidates.
         if raw.empty:
-            errors.append(f"{path.name}: contains a header but no candidate rows.")
+            n_without_candidates += 1
             continue
 
         unknown = [c for c in raw.columns if c not in known]
@@ -263,7 +303,25 @@ def load_dataset(
         frames.append(block)
 
     _fail(errors)
+    if not frames:
+        raise EmptyDatasetError(
+            f"Every file in {data_dir} has no candidate rows. Add at least one "
+            "star with detected candidates, then re-run this command."
+        )
     frame = pd.concat(frames, ignore_index=True)
+
+    # Rows without a catalogue verdict cannot supervise a model.
+    n_unlabelled = 0
+    if schema.target_column in frame.columns:
+        unlabelled = frame[schema.target_column].isin(list(schema.unlabelled_values))
+        n_unlabelled = int(unlabelled.sum())
+        if mode == "train" and n_unlabelled:
+            frame = frame.loc[~unlabelled].reset_index(drop=True)
+            if frame.empty:
+                raise EmptyDatasetError(
+                    f"Every candidate in {data_dir} is unlabelled "
+                    f"({sorted(schema.unlabelled_values)}); nothing to train on."
+                )
 
     # -- feature dtypes, infinities, empty features -------------------------
     features = frame.loc[:, list(schema.feature_columns)].copy()
@@ -306,15 +364,14 @@ def load_dataset(
     if mode == "train" or (has_label and has_status):
         if has_label:
             labels = frame[schema.target_column]
-            invalid = sorted(
-                {str(v) for v in labels[~labels.isin(list(schema.label_mapping))].unique()}
-            )
+            accepted = list(schema.label_mapping) + list(schema.unlabelled_values)
+            invalid = sorted({str(v) for v in labels[~labels.isin(accepted)].unique()})
             if invalid:
                 errors.append(
                     f"Invalid {schema.target_column} values {invalid}. Expected one of "
-                    f"{sorted(schema.label_mapping)}."
+                    f"{sorted(accepted)}."
                 )
-            else:
+            elif not n_unlabelled or mode == "train":
                 y = labels.map(schema.label_mapping).to_numpy(dtype=int)
         if has_status:
             statuses = frame[schema.status_column]
@@ -362,6 +419,8 @@ def load_dataset(
         y=y,
         status=status,
         reliable=reliable,
+        n_unlabelled=n_unlabelled,
+        n_files_without_candidates=n_without_candidates,
     )
 
 

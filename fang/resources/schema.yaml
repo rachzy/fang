@@ -1,5 +1,5 @@
 # Bump `schema_version` whenever `feature_columns` or `known_columns` change
-schema_version: 1
+schema_version: 2
 
 target_column: candidate_label
 status_column: detection_status
@@ -7,6 +7,10 @@ status_column: detection_status
 label_mapping:
   CONFIRMED: 1
   FALSE-POSITIVE: 0
+
+# Labels with no catalogue verdict: dropped for training, scored at prediction
+unlabelled_values:
+  - UNKNOWN
 
 valid_statuses:
   - accepted
@@ -63,6 +67,7 @@ excluded_columns:
     - detection_status
     - matched_target
     - matched_period_ratio
+    - fp_source
   pipeline_control:
     - mes_threshold_used
     - is_provisional_detection

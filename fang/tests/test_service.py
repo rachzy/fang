@@ -10,10 +10,15 @@ import pandas as pd
 import pytest
 import yaml
 
+from ..schema import load_schema
 from ..service import RunInfo, list_runs
 
+INSTALLED_VERSION = load_schema().schema_version
 
-def _write_run(base, run_id, schema_version=1, selected_model="lightgbm", threshold=0.5):
+
+def _write_run(
+    base, run_id, schema_version=INSTALLED_VERSION, selected_model="lightgbm", threshold=0.5
+):
     """Create a run directory with the sidecars list_runs() reads."""
     directory = base / run_id
     directory.mkdir(parents=True)
@@ -38,7 +43,7 @@ def test_lists_a_single_run(tmp_path):
     assert len(runs) == 1
     assert isinstance(runs[0], RunInfo)
     assert runs[0].run_id == "20260929T120000Z-abcd1234"
-    assert runs[0].schema_version == 1
+    assert runs[0].schema_version == INSTALLED_VERSION
     assert runs[0].selected_model == "lightgbm"
     assert runs[0].threshold == pytest.approx(0.5)
 
@@ -282,7 +287,7 @@ def test_a_real_trained_run_is_listed(trained_run):
 
     assert [r.run_id for r in runs] == [trained_run.name]
     assert runs[0].selected_model
-    assert runs[0].schema_version == 1
+    assert runs[0].schema_version == INSTALLED_VERSION
     assert 0.0 < runs[0].threshold <= 1.0
 
 
@@ -377,9 +382,9 @@ def test_threshold_boundaries_are_listed(tmp_path, threshold):
 
 
 def test_run_for_a_different_schema_version_is_skipped(tmp_path):
-    """Uses the real installed schema (version 1): load_model would refuse version 2."""
+    """Uses the real installed schema: load_model would refuse any other version."""
     _write_run(tmp_path, GOOD_RUN)
-    _write_run(tmp_path, BAD_RUN, schema_version=2)
+    _write_run(tmp_path, BAD_RUN, schema_version=INSTALLED_VERSION + 1)
 
     assert [r.run_id for r in list_runs(tmp_path)] == [GOOD_RUN]
 

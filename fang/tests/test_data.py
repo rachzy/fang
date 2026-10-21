@@ -54,6 +54,107 @@ def test_rejects_malformed_filenames(filename):
         parse_source_filename(filename)
 
 
+def test_inverted_variant_keeps_the_base_star_id():
+    assert parse_source_filename("KIC10014875_inverted_20261020.csv") == (
+        "KIC10014875",
+        dt.date(2026, 10, 20),
+    )
+
+
+def _add_inverted_copy(directory: Path, star: str, date: str) -> Path:
+    source = next(directory.glob(f"{star}_*.csv"))
+    frame = pd.read_csv(source)
+    frame["candidate_label"] = "FALSE-POSITIVE"
+    frame["fp_source"] = "inverted"
+    frame["period_days"] = frame["period_days"] + 1.0
+    target = directory / f"{star}_inverted_{date}.csv"
+    frame.to_csv(target, index=False)
+    return target
+
+
+def test_inverted_file_is_grouped_with_its_star(tmp_path, schema):
+    write_synthetic_dataset(tmp_path, n_stars=3, seed=1)
+    _add_inverted_copy(tmp_path, "Synth-000", "20260105")
+
+    dataset = load_dataset(tmp_path, mode="train", schema=schema)
+    assert dataset.stars == ("Synth-000", "Synth-001", "Synth-002")
+    assert len(dataset.files) == 4
+    inverted = dataset.source_file == "Synth-000_inverted_20260105.csv"
+    assert inverted.any()
+    assert set(dataset.star_id[inverted]) == {"Synth-000"}
+    assert (dataset.y[inverted] == 0).all()
+
+
+def test_rejects_two_inverted_files_for_the_same_star(tmp_path, schema):
+    write_synthetic_dataset(tmp_path, n_stars=3, seed=1)
+    _add_inverted_copy(tmp_path, "Synth-000", "20260105")
+    _add_inverted_copy(tmp_path, "Synth-000", "20260106")
+
+    with pytest.raises(DataValidationError, match="multiple inverted files"):
+        load_dataset(tmp_path, mode="train", schema=schema)
+
+
+def test_koi_catalogue_files_are_ignored(tmp_path, schema):
+    write_synthetic_dataset(tmp_path, n_stars=3, seed=1)
+    (tmp_path / "Synth-000-koi.csv").write_text(
+        "target,period_days,disposition\nK00001.01,3.2,FALSE POSITIVE\n"
+    )
+
+    dataset = load_dataset(tmp_path, mode="train", schema=schema)
+    assert all(not p.name.endswith("-koi.csv") for p in dataset.files)
+    assert "Synth-000-koi.csv" not in set(dataset.source_file)
+
+
+@pytest.mark.parametrize("content", ["", "\n", "period_days,MES\n"])
+def test_files_without_candidates_are_skipped(tmp_path, schema, content):
+    write_synthetic_dataset(tmp_path, n_stars=3, seed=1)
+    (tmp_path / "Synth-009_20260110.csv").write_text(content)
+
+    dataset = load_dataset(tmp_path, mode="train", schema=schema)
+    assert "Synth-009" not in dataset.stars
+    assert dataset.summary()["n_files_without_candidates"] == 1
+
+
+def test_directory_of_only_empty_files_fails(tmp_path, schema):
+    (tmp_path / "Synth-000_20260101.csv").write_text("\n")
+    with pytest.raises(EmptyDatasetError, match="no candidate rows"):
+        load_dataset(tmp_path, mode="train", schema=schema)
+
+
+def _mark_first_row_unknown(directory: Path) -> None:
+    target = directory / "Synth-001_20260102.csv"
+    frame = pd.read_csv(target)
+    frame.loc[0, "candidate_label"] = "UNKNOWN"
+    frame.to_csv(target, index=False)
+
+
+def test_unknown_labels_are_dropped_for_training(tmp_path, schema):
+    write_synthetic_dataset(tmp_path, n_stars=3, seed=1)
+    before = len(load_dataset(tmp_path, mode="train", schema=schema))
+    _mark_first_row_unknown(tmp_path)
+
+    dataset = load_dataset(tmp_path, mode="train", schema=schema)
+    assert len(dataset) == before - 1
+    assert "UNKNOWN" not in set(dataset.frame["candidate_label"])
+    assert len(dataset.weights) == len(dataset.y) == len(dataset.features) == len(dataset)
+    assert dataset.summary()["n_unlabelled"] == 1
+
+
+def test_unknown_labels_are_kept_for_prediction(tmp_path, schema):
+    write_synthetic_dataset(tmp_path, n_stars=3, seed=1)
+    before = len(load_dataset(tmp_path, mode="predict", schema=schema))
+    _mark_first_row_unknown(tmp_path)
+
+    dataset = load_dataset(tmp_path, mode="predict", schema=schema)
+    assert len(dataset) == before
+    assert dataset.y is None
+
+
+def test_fp_source_is_known_but_never_a_feature(schema):
+    assert "fp_source" in schema.known_columns
+    assert "fp_source" not in schema.feature_columns
+
+
 def test_rejects_two_files_for_the_same_star(tmp_path, schema):
     write_synthetic_dataset(tmp_path, n_stars=3, seed=1)
     source = tmp_path / "Synth-000_20260101.csv"

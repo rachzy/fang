@@ -28,6 +28,7 @@ class FeatureSchema:
     feature_columns: tuple[str, ...]
     excluded_columns: dict[str, tuple[str, ...]]
     required_columns: dict[str, tuple[str, ...]]
+    unlabelled_values: tuple[str, ...] = ()
     source: Path | None = field(default=None, compare=False)
 
     @property
@@ -65,6 +66,7 @@ class FeatureSchema:
             "feature_columns": list(self.feature_columns),
             "excluded_columns": {k: list(v) for k, v in self.excluded_columns.items()},
             "required_columns": {k: list(v) for k, v in self.required_columns.items()},
+            "unlabelled_values": list(self.unlabelled_values),
         }
 
 
@@ -108,6 +110,7 @@ def load_schema(path: str | Path | None = None) -> FeatureSchema:
                 str(k): tuple(str(c) for c in (v or []))
                 for k, v in (data.get("required_columns") or {}).items()
             },
+            unlabelled_values=tuple(str(v) for v in (data.get("unlabelled_values") or [])),
             source=resolved,
         )
     except KeyError as exc:  # pragma: no cover - defensive
@@ -127,6 +130,12 @@ def _check_schema_consistency(schema: FeatureSchema) -> None:
     if overlap:
         raise ConfigError(
             f"Columns appear in both feature_columns and excluded_columns: {sorted(overlap)}"
+        )
+
+    clash = set(schema.unlabelled_values).intersection(schema.label_mapping)
+    if clash:
+        raise ConfigError(
+            f"Values appear in both label_mapping and unlabelled_values: {sorted(clash)}"
         )
 
     if set(schema.label_mapping.values()) != {0, 1}:

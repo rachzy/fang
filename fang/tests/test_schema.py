@@ -11,7 +11,7 @@ from fang.schema import load_schema
 
 WITHHELD = {
     "supervision": ["candidate_label", "detection_status", "matched_target",
-                    "matched_period_ratio"],
+                    "matched_period_ratio", "fp_source"],
     "pipeline_control": ["mes_threshold_used", "is_provisional_detection"],
     "non_generalizable": ["t0"],
     "alias": ["duration_days", "scale_skewness", "scale_kurtosis",

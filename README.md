@@ -257,8 +257,8 @@ uv run coverage run -m pytest && uv run coverage report
 
 A `Makefile` wraps the common commands above; run `make help` for the list.
 
-Processed CSVs under `data/` are tracked in Git. Virtual environments, caches,
-generated models, reports, and predictions are ignored.
+CSVs under `data/` are local extracts and are not tracked in Git, nor are virtual
+environments, caches, generated models, reports, or predictions.
 
 ## License
 

@@ -11,7 +11,7 @@ htmlcov/
 .venv/
 venv/
 
-# Generated outputs (processed CSVs under data/ are tracked)
+# Generated outputs
 models/
 reports/
 predictions/
@@ -20,3 +20,6 @@ predictions.csv
 
 # Implementation plans (local only, deleted when the refactor is done)
 plans/
+
+# Extracted datasets (Shaula tables and catalogue extracts) stay local
+data/**/*.csv

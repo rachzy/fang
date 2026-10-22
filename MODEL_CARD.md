@@ -15,7 +15,7 @@
 | **License**       | see `LICENSE`                                                                    |
 
 All configured candidates are fitted on every run and **the highest-scoring candidate
-that meets the recall floor ships**. The full ranking, the runner-up, and the winning
+ships**, ranked by recall at the precision floor. The full ranking, the runner-up, and the winning
 margin are recorded in `selection.json` and printed by the CLI. Every candidate
 stays in the bundle, so the choice can be revisited without refitting; setting
 `selection.strategy` to a model name pins that model instead.
@@ -32,7 +32,8 @@ established best.
 
 Triage of transit candidates that a detection pipeline has already produced:
 ranking and shortlisting candidates for human or follow-up attention, with the
-operating point deliberately tuned for high recall.
+operating point deliberately tuned for high precision: a `POTENTIAL` flag should
+rarely be wrong, at the cost of missing some planets.
 
 **`potential_probability` is a screening score learned from literature-derived
 labels, not scientific confirmation.** The labels say which candidates were
@@ -90,16 +91,17 @@ are empty across the whole dataset are rejected at load time.
 
 ## Objective and operating point
 
-Select the threshold with the greatest precision that still achieves **at least
-95 % recall** on cross-fitted accepted candidates. Ties resolve towards higher
-recall, then towards the lower (more inclusive) threshold.
+Select the threshold with the greatest recall that still achieves **at least
+95 % precision** on cross-fitted training candidates. Ties resolve towards higher
+precision, then towards the higher (stricter) threshold. Tuning and model
+selection score recall at that precision floor.
 
 No automatic class weighting is applied beyond the equal-star sample weights.
-The recall target is met through model selection and thresholding, which keeps
+The precision target is met through model selection and thresholding, which keeps
 the probabilities interpretable rather than skewed by a class-weight prior.
 
 The saved threshold is derived from cross-fitted predictions on the **training**
-stars. Held-out recall on genuinely new stars can differ, and the nested
+stars. Held-out precision on genuinely new stars can differ, and the nested
 evaluation reports what it was.
 
 ## Evaluation methodology
@@ -228,9 +230,10 @@ Plots for calibration, precision-recall, ROC, score separation, permutation impo
   detection pipeline. Feeding features produced by a different pipeline, or with
   different settings, invalidates the calibration even when the column names
   match.
-- **Threshold optimism.** The 95 % recall floor is enforced on cross-fitted
-  training predictions. It is a fitted quantity, and held-out recall may fall
-  below it.
+- **Threshold optimism.** The 95 % precision floor is enforced on cross-fitted
+  training predictions. It is a fitted quantity, and held-out precision may fall
+  below it. Near the top of the ranking it rests on few candidates, so it is
+  especially noisy.
 - **Selection optimism.** The shipped model is the best of six on a score that
   is then reported for it, so that score overstates expected performance. The
   effect grows with the number of candidates and shrinks with the number of

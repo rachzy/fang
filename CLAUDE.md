@@ -35,11 +35,11 @@ regression as active base learners).
 - **Weights.** `star_balanced_weights` gives every star the same total weight in every fit and metric, recomputed
   per subset. No automatic class weighting.
 - **Tuning.** Seeded (`seed: 42`), deterministic sampling of `n_candidates` from each grid, scored by inner grouped
-  CV on `objective.metric` (average precision).
-- **Threshold.** Per model, the highest-precision threshold that keeps recall >= `objective.min_recall` (0.95) on
-  cross-fitted training rows.
+  CV on `objective.metric` (`recall_at_precision`: best recall at precision >= `objective.min_precision`).
+- **Threshold.** Per model, the highest-recall threshold that keeps precision >= `objective.min_precision` (0.95)
+  on cross-fitted training rows. False positives are the costly error; losing some planets is acceptable.
 - **Selection** (`training.py`, `choose_model`): every candidate (`stack` and each base learner) is fitted and kept
-  in the bundle; the best average precision among those meeting the recall floor ships as `selected_model`.
+  in the bundle; the best `selection.metric` (`recall_at_precision`, pooled held-out) ships as `selected_model`.
   In recent nested evaluations the stack scores below the best gradient-boosted learner; making it outperform them
   without overfitting is an open goal.
 - **Evaluation** (`evaluate.py`): nested `StratifiedGroupKFold` grouped by `star_id` (5 outer, 3 inner; never

@@ -112,7 +112,7 @@ and are exported with candidate counts in `fold_average_precision.csv`.
 Unscorable APs are excluded from the mean and saved as JSON `null` / blank CSV
 cells. Each fold retains the configured candidate weighting; folds receive
 equal weight in the mean. Model selection continues to use the configured
-pooled score and recall floor.
+pooled score.
 
 ### Prediction output
 
@@ -149,7 +149,7 @@ The configured base learners are fitted on every run, together with the L2
 logistic-regression **stack**. Each configured base learner is also evaluated on
 its own.
 
-**Among candidates meeting the recall floor, the highest-scoring candidate ships.**
+**The highest-scoring candidate ships.**
 `train` ranks them,
 serves the winner from `predict`, and records the full ranking in
 `selection.json`. All fitted candidates stay in the bundle, so a run can be
@@ -161,12 +161,11 @@ Selection is configurable under `selection` in the config:
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `strategy` | `best` | `best` picks the top scorer; naming a model (e.g. `stack`) pins it |
-| `metric` | `average_precision` | `average_precision` or `precision`, after applying the recall floor |
+| `metric` | `recall_at_precision` | `recall_at_precision`, `average_precision` or `precision` |
 | `score_source` | `nested_evaluation` | pooled held-out scores, falling back to cross-fitted training scores when evaluation is skipped |
 | `candidates` | configured models plus stack | which configured models may be chosen; ties fall to the first listed |
 
-> **Selection caveat.** The winner is chosen from candidates whose held-out
-> recall meets `objective.min_recall`, using the configured selection metric.
+> **Selection caveat.** The winner is chosen on the configured selection metric.
 > The same held-out score is then reported for it, so taking the best of five
 > correlated estimates still biases the headline number upward. When the
 > winning margin is small relative to the bootstrap intervals -- which it often
@@ -191,10 +190,17 @@ weighting is used.
 
 ### Objective
 
-Pick the threshold with the greatest precision that reaches `objective.min_recall`
-on cross-fitted **accepted** candidates. Ties resolve towards higher recall.
-Hyperparameters use `objective.metric`; both it and `selection.metric` accept
-`average_precision` or `precision`.
+False positives are treated as the costly error. Pick the threshold with the
+greatest recall that keeps precision at or above `objective.min_precision`
+(0.95) on cross-fitted training candidates. Ties resolve towards higher
+precision, then the higher threshold. If no threshold reaches the floor, the
+most precise one is kept and `threshold.json` records `precision_floor_met: false`.
+
+Hyperparameters use `objective.metric`; it and `selection.metric` accept
+`recall_at_precision` (default), `average_precision` or `precision`.
+`recall_at_precision` is the best recall over all thresholds whose precision
+meets `objective.min_precision`; like AP it does not depend on the saved
+threshold, and it is 0 when no threshold reaches the floor.
 
 Reported metrics and the tuning score use the same equal-star weights as the
 fits, so a star with many candidates does not dominate the numbers

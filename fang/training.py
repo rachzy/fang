@@ -64,8 +64,7 @@ class SelectionRecord:
     score_source: str
     scores: dict[str, float]
     candidates: tuple[str, ...]
-    recalls: dict[str, float] | None = None
-    min_recall: float | None = None
+    min_precision: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -75,30 +74,14 @@ class SelectionRecord:
             "score_source": self.score_source,
             "candidates": list(self.candidates),
             "scores": self.scores,
-            "recalls": getattr(self, "recalls", None),
-            "min_recall": getattr(self, "min_recall", None),
+            "min_precision": getattr(self, "min_precision", None),
             "runner_up": self.runner_up,
             "margin": self.margin,
         }
 
     @property
     def ranked(self) -> list[tuple[str, float]]:
-        recalls = getattr(self, "recalls", None)
-        min_recall = getattr(self, "min_recall", None)
-        usable = [
-            (n, s)
-            for n, s in self.scores.items()
-            if not np.isnan(s)
-            and (
-                min_recall is None
-                or (
-                    recalls is not None
-                    and n in recalls
-                    and not np.isnan(recalls[n])
-                    and recalls[n] >= min_recall - 1e-12
-                )
-            )
-        ]
+        usable = [(n, s) for n, s in self.scores.items() if not np.isnan(s)]
         order = list(self.candidates)
 
         def tie_break(name: str) -> int:
@@ -326,7 +309,7 @@ def _training_report(
         per_model[name] = {
             "threshold_choice": fit.thresholds[name].to_dict(),
             "crossfit_metrics": compute_metrics(
-                y[rows], probabilities[name][rows], threshold, weights
+                y[rows], probabilities[name][rows], threshold, weights, config.min_precision
             ),
         }
 
@@ -357,27 +340,12 @@ def _crossfit_scores(
     return {
         name: float(
             compute_metrics(
-                y[rows], probabilities[name][rows], fit.thresholds[name].threshold, weights
+                y[rows],
+                probabilities[name][rows],
+                fit.thresholds[name].threshold,
+                weights,
+                config.min_precision,
             ).get(metric, float("nan"))
-        )
-        for name in reported_models(config)
-    }
-
-
-def _crossfit_recalls(
-    fit: StackFitResult, dataset: Dataset, config: Config
-) -> dict[str, float]:
-    """Recall of each candidate at its cross-fitted recall-floor threshold."""
-    y = dataset.require_supervision()
-    groups = dataset.star_id
-    probabilities = fit.training_probabilities()
-    rows = np.flatnonzero(~np.isnan(probabilities[STACK]))
-    weights = star_balanced_weights(groups[rows]) if config.weighted_metrics else None
-    return {
-        name: float(
-            compute_metrics(
-                y[rows], probabilities[name][rows], fit.thresholds[name].threshold, weights
-            ).get("recall", float("nan"))
         )
         for name in reported_models(config)
     }
@@ -404,22 +372,15 @@ def choose_model(
 
     if preferred == "nested_evaluation" and evaluation is not None:
         scores = evaluation.selection_scores(metric)
-        recalls = evaluation.selection_recalls()
         source = "nested_evaluation"
     else:
         scores = _crossfit_scores(fit, dataset, config, metric)
-        recalls = _crossfit_recalls(fit, dataset, config)
         source = "crossfit"
 
     selected = (
         strategy
         if strategy != SELECTION_STRATEGY_BEST
-        else select_best_model(
-            scores,
-            candidates,
-            recalls=recalls,
-            min_recall=config.min_recall,
-        )
+        else select_best_model(scores, candidates)
     )
     return SelectionRecord(
         selected_model=selected,
@@ -428,8 +389,7 @@ def choose_model(
         score_source=source,
         scores=scores,
         candidates=candidates,
-        recalls=recalls,
-        min_recall=config.min_recall if strategy == SELECTION_STRATEGY_BEST else None,
+        min_precision=config.min_precision,
     )
 
 

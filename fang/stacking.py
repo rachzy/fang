@@ -22,6 +22,7 @@ from .data import star_balanced_weights
 from .errors import DataDiversityError
 from .metrics import (
     ThresholdChoice,
+    recall_at_precision,
     safe_average_precision,
     select_threshold,
 )
@@ -149,7 +150,7 @@ class FittedStack:
 
     @property
     def threshold(self) -> float:
-        """The recall-floor threshold belonging to the selected model."""
+        """The precision-floor threshold belonging to the selected model."""
         return float(self.thresholds[self.selected_model])
 
     @property
@@ -240,7 +241,7 @@ def _score_fold(
     prob: np.ndarray,
     groups: np.ndarray,
     metric: str,
-    min_recall: float,
+    min_precision: float,
     weighted: bool,
 ) -> float:
     """Configured tuning score for one validation fold."""
@@ -249,7 +250,9 @@ def _score_fold(
     weights = star_balanced_weights(groups) if weighted else None
     if metric == "average_precision":
         return safe_average_precision(y, prob, sample_weight=weights)
-    return select_threshold(y, prob, min_recall, sample_weight=weights).precision
+    if metric == "recall_at_precision":
+        return recall_at_precision(y, prob, min_precision, sample_weight=weights)
+    return select_threshold(y, prob, min_precision, sample_weight=weights).precision
 
 
 def tune_base_learner(
@@ -261,7 +264,7 @@ def tune_base_learner(
     config: Config,
     progress: Progress = None,
 ) -> TuningResult:
-    """Pick hyper-parameters by mean average precision over every candidate."""
+    """Pick hyper-parameters by the mean ``objective.metric`` over every candidate."""
     grid = candidate_params(learner, config)
     weighted = config.weighted_metrics
     records: list[dict[str, Any]] = []
@@ -277,7 +280,7 @@ def tune_base_learner(
                     prob,
                     groups[va],
                     config.objective_metric,
-                    config.min_recall,
+                    config.min_precision,
                     weighted,
                 )
             )
@@ -361,7 +364,7 @@ def tune_meta_learner(
                     probability,
                     groups[val_rows],
                     config.objective_metric,
-                    config.min_recall,
+                    config.min_precision,
                     weighted,
                 )
             )
@@ -547,15 +550,12 @@ def reported_models(config: Config) -> tuple[str, ...]:
 def select_best_model(
     scores: dict[str, float],
     candidates: Sequence[str] | None = None,
-    recalls: dict[str, float] | None = None,
-    min_recall: float | None = None,
 ) -> str:
     """Name the highest-scoring candidate, breaking ties deterministically.
 
     Ties fall to whichever model comes first in :func:`reported_models`, which
     puts the stack ahead of its own parts. Candidates that could not be scored
-    (NaN) are skipped. When supplied, ``recalls`` and ``min_recall`` restrict
-    selection to candidates that meet the recall floor.
+    (NaN) are skipped.
     """
     order = list(candidates) if candidates is not None else list(scores)
     scored = [
@@ -563,20 +563,7 @@ def select_best_model(
         for name in order
         if name in scores and not np.isnan(scores[name])
     ]
-    if min_recall is not None:
-        if recalls is None:
-            raise ValueError("recalls are required when min_recall is supplied.")
-        scored = [
-            (name, score)
-            for name, score in scored
-            if name in recalls and not np.isnan(recalls[name])
-            and recalls[name] >= min_recall - 1e-12
-        ]
     if not scored:
-        if min_recall is not None:
-            raise DataDiversityError(
-                f"No candidate model met the recall floor of {min_recall:.3f}."
-            )
         raise DataDiversityError(
             "No candidate model could be scored for selection. This needs "
             "candidates of both classes in the held-out folds."
@@ -599,7 +586,7 @@ def fit_stack(
     Steps, in order: tune each base learner by inner grouped CV; build
     out-of-fold base probabilities; prepare independent base pipelines within
     each meta-training partition; tune and cross-fit the meta-model with those
-    isolated inputs; choose the recall-floor threshold; then refit the
+    isolated inputs; choose the precision-floor threshold; then refit the
     meta-model and the bases on every row.
     """
     cv = config.cv
@@ -667,7 +654,7 @@ def _choose_thresholds(
     groups: np.ndarray,
     config: Config,
 ) -> dict[str, ThresholdChoice]:
-    """One recall-constrained threshold per model, from cross-fitted training rows."""
+    """One precision-constrained threshold per model, from cross-fitted training rows."""
     rows = np.flatnonzero(~np.isnan(meta_crossfit))
     if rows.size == 0 or np.unique(y[rows]).size < 2:
         raise DataDiversityError(
@@ -681,7 +668,7 @@ def _choose_thresholds(
         sources[learner] = base_oof[:, column]
     return {
         name: select_threshold(
-            y[rows], probabilities[rows], config.min_recall, sample_weight=weights
+            y[rows], probabilities[rows], config.min_precision, sample_weight=weights
         )
         for name, probabilities in sources.items()
     }

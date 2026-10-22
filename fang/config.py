@@ -15,7 +15,7 @@ from .errors import ConfigError
 
 DEFAULT_CONFIG_RESOURCE = "config.yaml"
 
-SUPPORTED_METRICS: tuple[str, ...] = ("precision", "average_precision")
+SUPPORTED_METRICS: tuple[str, ...] = ("precision", "average_precision", "recall_at_precision")
 
 
 @dataclass(frozen=True)
@@ -39,8 +39,8 @@ class Config:
         return str(self.data["objective"]["metric"])
 
     @property
-    def min_recall(self) -> float:
-        return float(self.data["objective"]["min_recall"])
+    def min_precision(self) -> float:
+        return float(self.data["objective"]["min_precision"])
 
     @property
     def weighted_metrics(self) -> bool:
@@ -155,8 +155,14 @@ def _validate(config: Config) -> None:
             f"objective.metric must be one of {list(SUPPORTED_METRICS)}; "
             f"got {config.objective_metric!r}."
         )
-    if not 0.0 < config.min_recall <= 1.0:
-        raise ConfigError(f"objective.min_recall must be in (0, 1]; got {config.min_recall}.")
+    if "min_precision" not in data["objective"]:
+        raise ConfigError(
+            "objective.min_precision is required (it replaced objective.min_recall)."
+        )
+    if not 0.0 < config.min_precision <= 1.0:
+        raise ConfigError(
+            f"objective.min_precision must be in (0, 1]; got {config.min_precision}."
+        )
 
     selection = config.selection
     selection_metric = selection.get("metric")

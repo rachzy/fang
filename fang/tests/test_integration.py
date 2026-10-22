@@ -94,14 +94,9 @@ def test_comparison_table_marks_the_model_that_would_ship(evaluation):
     assert len(table) == len(_model_names(evaluation))
 
 
-def test_would_ship_is_the_highest_average_precision(evaluation):
-    scores = evaluation.selection_scores("average_precision")
-    recalls = evaluation.selection_recalls()
-    feasible = [
-        score for name, score in scores.items()
-        if recalls[name] >= evaluation.config["objective"]["min_recall"] - 1e-12
-    ]
-    best = max(feasible)
+def test_would_ship_is_the_highest_selection_score(evaluation):
+    scores = evaluation.selection_scores(evaluation.config["selection"]["metric"])
+    best = max(score for score in scores.values() if not np.isnan(score))
     assert scores[evaluation.would_ship()] == pytest.approx(best)
 
 
@@ -262,11 +257,12 @@ def test_rerunning_into_a_populated_directory_is_refused(trained, fast_config):
         write_training_artifacts(trained, trained.artifact_dir.parent)
 
 
-def test_training_meets_the_configured_recall_floor(trained):
+def test_training_meets_the_configured_precision_floor(trained):
     report = trained.report
     selected = trained.bundle.selected_model
     choice = report["models"][selected]["threshold_choice"]
-    assert choice["recall"] >= trained.bundle.config["objective"]["min_recall"]
+    assert choice["precision_floor_met"]
+    assert choice["precision"] >= trained.bundle.config["objective"]["min_precision"] - 1e-12
 
 
 def test_training_oof_frame_labels_every_row(trained):

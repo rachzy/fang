@@ -44,12 +44,6 @@ def test_unscorable_candidates_are_skipped():
     assert select_best_model(scores) == "lightgbm"
 
 
-def test_selection_enforces_the_recall_floor():
-    scores = {STACK: 0.99, "lightgbm": 0.90, "extra_trees": 0.80}
-    recalls = {STACK: 0.94, "lightgbm": 0.95, "extra_trees": 0.99}
-    assert select_best_model(scores, recalls=recalls, min_recall=0.95) == "lightgbm"
-
-
 def test_no_scorable_candidate_is_an_error():
     with pytest.raises(DataDiversityError, match="No candidate model could be scored"):
         select_best_model({STACK: float("nan")})
@@ -61,8 +55,20 @@ def test_no_scorable_candidate_is_an_error():
 def test_default_strategy_is_best():
     config = load_config()
     assert config.selection["strategy"] == "best"
-    assert config.selection["metric"] == "average_precision"
+    assert config.selection["metric"] == "recall_at_precision"
     assert set(config.selection_candidates) == {"stack", *config.base_learners}
+
+
+def test_default_objective_is_recall_at_a_precision_floor():
+    config = load_config()
+    assert config.objective_metric == "recall_at_precision"
+    assert config.min_precision == pytest.approx(0.95)
+
+
+@pytest.mark.parametrize("value", [0.0, 1.5])
+def test_out_of_range_precision_floor_is_rejected(value):
+    with pytest.raises(ConfigError, match="min_precision must be in"):
+        load_config().with_overrides({"objective": {"min_precision": value}})
 
 
 @pytest.mark.parametrize(

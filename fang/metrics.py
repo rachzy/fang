@@ -46,12 +46,12 @@ def _broadcast_thresholds(threshold: float | np.ndarray, n: int) -> np.ndarray:
 # ---------------------------------------------------------------------------
 @dataclass(frozen=True)
 class ThresholdChoice:
-    """The highest-precision operating point satisfying a recall floor."""
+    """The highest-recall operating point satisfying a precision floor."""
 
     threshold: float
     precision: float
     recall: float
-    min_recall: float
+    min_precision: float
     achieved: bool
     n_candidates: int
 
@@ -60,8 +60,8 @@ class ThresholdChoice:
             "threshold": float(self.threshold),
             "precision": float(self.precision),
             "recall": float(self.recall),
-            "min_recall": float(self.min_recall),
-            "recall_floor_met": bool(self.achieved),
+            "min_precision": float(self.min_precision),
+            "precision_floor_met": bool(self.achieved),
             "n_candidate_thresholds": int(self.n_candidates),
         }
 
@@ -69,12 +69,14 @@ class ThresholdChoice:
 def select_threshold(
     y_true: np.ndarray,
     y_prob: np.ndarray,
-    min_recall: float,
+    min_precision: float,
     sample_weight: np.ndarray | None = None,
 ) -> ThresholdChoice:
-    """Choose the highest-precision threshold satisfying ``min_recall``.
+    """Choose the highest-recall threshold satisfying ``min_precision``.
 
-    Precision ties resolve toward higher recall and then the lower threshold.
+    Recall ties resolve toward higher precision and then the higher threshold.
+    When no threshold reaches the floor, the highest-precision one is returned
+    with ``achieved`` false.
     """
     y = np.asarray(y_true, dtype=int)
     p = np.asarray(y_prob, dtype=float)
@@ -93,24 +95,46 @@ def select_threshold(
     recall = tp / positive
     precision = np.divide(tp, tp + fp, out=np.zeros_like(tp), where=(tp + fp) > 0)
 
-    feasible = np.flatnonzero(recall >= min_recall - EPS)
+    feasible = np.flatnonzero((tp > 0) & (precision >= min_precision - EPS))
     achieved = feasible.size > 0
-    if not achieved:
-        feasible = np.arange(candidates.size)
-
-    order = sorted(
-        feasible.tolist(),
-        key=lambda i: (-precision[i], -recall[i], candidates[i]),
-    )
+    if achieved:
+        order = sorted(
+            feasible.tolist(),
+            key=lambda i: (-recall[i], -precision[i], -candidates[i]),
+        )
+    else:
+        order = sorted(
+            range(candidates.size),
+            key=lambda i: (-precision[i], -recall[i], -candidates[i]),
+        )
     best = order[0]
     return ThresholdChoice(
         threshold=float(candidates[best]),
         precision=float(precision[best]),
         recall=float(recall[best]),
-        min_recall=float(min_recall),
+        min_precision=float(min_precision),
         achieved=bool(achieved),
         n_candidates=int(candidates.size),
     )
+
+
+def recall_at_precision(
+    y_true: np.ndarray,
+    y_prob: np.ndarray,
+    min_precision: float,
+    sample_weight: np.ndarray | None = None,
+) -> float:
+    """Best recall over thresholds keeping precision >= ``min_precision``.
+
+    Threshold-free, like average precision: it scores the ranking in the
+    high-precision region. 0 when no threshold reaches the floor, NaN when the
+    subset has only one class.
+    """
+    y = np.asarray(y_true, dtype=int)
+    if not _both_classes(y):
+        return float("nan")
+    choice = select_threshold(y, y_prob, min_precision, sample_weight=sample_weight)
+    return choice.recall if choice.achieved else 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -135,11 +159,13 @@ def compute_metrics(
     y_prob: np.ndarray,
     threshold: float | np.ndarray,
     sample_weight: np.ndarray | None = None,
+    min_precision: float | None = None,
 ) -> dict[str, Any]:
     """Full metric set for one model at one operating point.
 
     ``threshold`` may be an array when pooling rows that were scored under
-    different fold-specific operating points.
+    different fold-specific operating points. ``recall_at_precision`` ignores
+    it and is NaN unless ``min_precision`` is given.
     """
     y = np.asarray(y_true, dtype=int)
     p = np.asarray(y_prob, dtype=float)
@@ -174,6 +200,9 @@ def compute_metrics(
         "f2": float(f2),
         "average_precision": float(average_precision_score(y, p, sample_weight=w))
         if both
+        else float("nan"),
+        "recall_at_precision": recall_at_precision(y, p, min_precision, sample_weight=w)
+        if min_precision is not None
         else float("nan"),
         "roc_auc": float(roc_auc_score(y, p, sample_weight=w)) if both else float("nan"),
         "brier_score": float(np.average((p - y) ** 2, weights=w)),
@@ -293,6 +322,7 @@ _BOOTSTRAP_METRICS = (
     "recall",
     "f2",
     "average_precision",
+    "recall_at_precision",
     "roc_auc",
     "brier_score",
     "log_loss",
@@ -308,6 +338,7 @@ def star_bootstrap_intervals(
     confidence_level: float = 0.95,
     seed: int = 42,
     weighted: bool = True,
+    min_precision: float | None = None,
 ) -> BootstrapResult:
     """Resample stars with replacement and take percentile intervals.
 
@@ -324,7 +355,11 @@ def star_bootstrap_intervals(
     index_by_star = {star: np.flatnonzero(stars == star) for star in unique_stars}
     rng = np.random.default_rng(seed)
 
-    draws: dict[str, list[float]] = {name: [] for name in _BOOTSTRAP_METRICS}
+    draws: dict[str, list[float]] = {
+        name: []
+        for name in _BOOTSTRAP_METRICS
+        if name != "recall_at_precision" or min_precision is not None
+    }
     for _ in range(n_resamples):
         picked = rng.integers(0, unique_stars.size, size=unique_stars.size)
         rows = np.concatenate([index_by_star[unique_stars[i]] for i in picked])
@@ -356,6 +391,10 @@ def star_bootstrap_intervals(
         draws["average_precision"].append(
             float(average_precision_score(ys, ps, sample_weight=ww))
         )
+        if min_precision is not None:
+            draws["recall_at_precision"].append(
+                recall_at_precision(ys, ps, min_precision, sample_weight=ww)
+            )
         draws["roc_auc"].append(float(roc_auc_score(ys, ps, sample_weight=ww)))
         draws["brier_score"].append(float(np.average((ps - ys) ** 2, weights=ww)))
         draws["log_loss"].append(float(log_loss(ys, clipped, labels=[0, 1], sample_weight=ww)))

@@ -55,13 +55,13 @@ def test_no_scorable_candidate_is_an_error():
 def test_default_strategy_is_best():
     config = load_config()
     assert config.selection["strategy"] == "best"
-    assert config.selection["metric"] == "recall_at_precision"
+    assert config.selection["metric"] == "average_precision"
     assert set(config.selection_candidates) == {"stack", *config.base_learners}
 
 
-def test_default_objective_is_recall_at_a_precision_floor():
+def test_default_objective_is_ap_with_a_precision_floor():
     config = load_config()
-    assert config.objective_metric == "recall_at_precision"
+    assert config.objective_metric == "average_precision"
     assert config.min_precision == pytest.approx(0.95)
 
 

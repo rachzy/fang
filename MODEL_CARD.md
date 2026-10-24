@@ -15,7 +15,7 @@
 | **License**       | see `LICENSE`                                                                    |
 
 All configured candidates are fitted on every run and **the highest-scoring candidate
-ships**, ranked by recall at the precision floor. The full ranking, the runner-up, and the winning
+ships**, ranked by average precision. The full ranking, the runner-up, and the winning
 margin are recorded in `selection.json` and printed by the CLI. Every candidate
 stays in the bundle, so the choice can be revisited without refitting; setting
 `selection.strategy` to a model name pins that model instead.
@@ -94,7 +94,8 @@ are empty across the whole dataset are rejected at load time.
 Select the threshold with the greatest recall that still achieves **at least
 95 % precision** on cross-fitted training candidates. Ties resolve towards higher
 precision, then towards the higher (stricter) threshold. Tuning and model
-selection score recall at that precision floor.
+selection use average precision; recall at the precision floor is reported but
+not optimised, because one heavily weighted false positive can swing it.
 
 No automatic class weighting is applied beyond the equal-star sample weights.
 The precision target is met through model selection and thresholding, which keeps

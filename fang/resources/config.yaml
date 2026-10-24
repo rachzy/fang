@@ -2,13 +2,13 @@ config_version: 1
 seed: 42
 
 objective:
-  metric: recall_at_precision
+  metric: average_precision
   min_precision: 0.95
   weighted_metrics: true
 
 selection:
   strategy: best
-  metric: recall_at_precision
+  metric: average_precision
   score_source: nested_evaluation
   candidates:
     - stack

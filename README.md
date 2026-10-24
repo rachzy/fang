@@ -161,7 +161,7 @@ Selection is configurable under `selection` in the config:
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `strategy` | `best` | `best` picks the top scorer; naming a model (e.g. `stack`) pins it |
-| `metric` | `recall_at_precision` | `recall_at_precision`, `average_precision` or `precision` |
+| `metric` | `average_precision` | `average_precision`, `recall_at_precision` or `precision` |
 | `score_source` | `nested_evaluation` | pooled held-out scores, falling back to cross-fitted training scores when evaluation is skipped |
 | `candidates` | configured models plus stack | which configured models may be chosen; ties fall to the first listed |
 
@@ -197,10 +197,12 @@ precision, then the higher threshold. If no threshold reaches the floor, the
 most precise one is kept and `threshold.json` records `precision_floor_met: false`.
 
 Hyperparameters use `objective.metric`; it and `selection.metric` accept
-`recall_at_precision` (default), `average_precision` or `precision`.
+`average_precision` (default), `recall_at_precision` or `precision`.
 `recall_at_precision` is the best recall over all thresholds whose precision
 meets `objective.min_precision`; like AP it does not depend on the saved
-threshold, and it is 0 when no threshold reaches the floor.
+threshold, and it is 0 when no threshold reaches the floor. It is reported
+rather than optimised by default: a single false positive just above the floor,
+on a star with few candidates, can move it by more than 0.2.
 
 Reported metrics and the tuning score use the same equal-star weights as the
 fits, so a star with many candidates does not dominate the numbers

@@ -113,7 +113,7 @@ class EvaluationResult:
         if strategy != "best":
             return strategy
         return select_best_model(
-            self.selection_scores(selection.get("metric", "recall_at_precision")),
+            self.selection_scores(selection.get("metric", "average_precision")),
             candidates,
         )
 

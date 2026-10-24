@@ -38,7 +38,8 @@ regression as active base learners).
   CV on `objective.metric` (average precision). `recall_at_precision` is reported, not optimised: it swings on
   single heavily weighted rows.
 - **Threshold.** Per model, the highest-recall threshold that keeps precision >= `objective.min_precision` (0.95)
-  on cross-fitted training rows. False positives are the costly error; losing some planets is acceptable.
+  on cross-fitted training rows, taken as the median over `objective.threshold_resamples` star-bootstrap resamples
+  (a single-sample cutoff jumped with one row near the top). False positives are the costly error.
 - **Selection** (`training.py`, `choose_model`): every candidate (`stack` and each base learner) is fitted and kept
   in the bundle; the best `selection.metric` (average precision, pooled held-out) ships as `selected_model`.
   In recent nested evaluations the stack scores below the best gradient-boosted learner; making it outperform them

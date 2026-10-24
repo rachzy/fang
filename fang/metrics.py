@@ -54,6 +54,7 @@ class ThresholdChoice:
     min_precision: float
     achieved: bool
     n_candidates: int
+    n_resamples: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -63,6 +64,7 @@ class ThresholdChoice:
             "min_precision": float(self.min_precision),
             "precision_floor_met": bool(self.achieved),
             "n_candidate_thresholds": int(self.n_candidates),
+            "n_resamples": int(getattr(self, "n_resamples", 0)),
         }
 
 
@@ -88,10 +90,14 @@ def select_threshold(
     if positive <= 0:
         raise ValueError("Cannot select a threshold: no positive candidates present.")
 
-    candidates = np.unique(p)
-    flags = p[None, :] >= candidates[:, None]
-    tp = (flags & (y == 1)[None, :]) @ w
-    fp = (flags & (y == 0)[None, :]) @ w
+    # Walk the scores from the top: cumulative weights at the last row of each
+    # distinct score are the counts flagged by that score used as a threshold.
+    order = np.argsort(-p, kind="stable")
+    ordered = p[order]
+    last_of_value = np.r_[ordered[1:] != ordered[:-1], True]
+    candidates = ordered[last_of_value]
+    tp = np.cumsum(w[order] * (y[order] == 1))[last_of_value]
+    fp = np.cumsum(w[order] * (y[order] == 0))[last_of_value]
     recall = tp / positive
     precision = np.divide(tp, tp + fp, out=np.zeros_like(tp), where=(tp + fp) > 0)
 
@@ -115,6 +121,68 @@ def select_threshold(
         min_precision=float(min_precision),
         achieved=bool(achieved),
         n_candidates=int(candidates.size),
+    )
+
+
+def bootstrap_threshold(
+    y_true: np.ndarray,
+    y_prob: np.ndarray,
+    star_id: np.ndarray,
+    min_precision: float,
+    n_resamples: int,
+    seed: int = 42,
+    weighted: bool = True,
+) -> ThresholdChoice:
+    """Median of the precision-floor thresholds over star-bootstrap resamples.
+
+    Near the top of the ranking the precision curve rests on a handful of
+    rows, so the single-sample threshold jumps with any one of them. Resampling
+    whole stars and taking the median cutoff steadies it. Resamples that cannot
+    reach the floor are skipped; with none left, or ``n_resamples`` 0, the
+    single-sample choice is returned.
+    """
+    y = np.asarray(y_true, dtype=int)
+    p = np.asarray(y_prob, dtype=float)
+    stars = np.asarray(star_id, dtype=object)
+    full_weights = star_balanced_weights(stars) if weighted else None
+    point = select_threshold(y, p, min_precision, sample_weight=full_weights)
+    if n_resamples <= 0:
+        return point
+
+    unique_stars = np.array(sorted(set(stars.tolist())), dtype=object)
+    index_by_star = {star: np.flatnonzero(stars == star) for star in unique_stars}
+    rng = np.random.default_rng(seed)
+    thresholds: list[float] = []
+    for _ in range(n_resamples):
+        picked = rng.integers(0, unique_stars.size, size=unique_stars.size)
+        rows = np.concatenate([index_by_star[unique_stars[i]] for i in picked])
+        if not (y[rows] == 1).any():
+            continue
+        replicate_ids = np.concatenate(
+            [np.full(index_by_star[unique_stars[s]].size, f"{s}#{k}", dtype=object)
+             for k, s in enumerate(picked)]
+        )
+        weights = star_balanced_weights(replicate_ids) if weighted else None
+        choice = select_threshold(y[rows], p[rows], min_precision, sample_weight=weights)
+        if choice.achieved:
+            thresholds.append(choice.threshold)
+    if not thresholds:
+        return point
+
+    threshold = float(np.median(thresholds))
+    w = _as_weights(full_weights, y.size)
+    flagged = p >= threshold
+    tp = w[flagged & (y == 1)].sum()
+    fp = w[flagged & (y == 0)].sum()
+    precision = float(tp / (tp + fp)) if (tp + fp) > 0 else 0.0
+    return ThresholdChoice(
+        threshold=threshold,
+        precision=precision,
+        recall=float(tp / w[y == 1].sum()),
+        min_precision=float(min_precision),
+        achieved=bool(tp > 0 and precision >= min_precision - EPS),
+        n_candidates=point.n_candidates,
+        n_resamples=len(thresholds),
     )
 
 

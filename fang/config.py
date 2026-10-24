@@ -43,6 +43,11 @@ class Config:
         return float(self.data["objective"]["min_precision"])
 
     @property
+    def threshold_resamples(self) -> int:
+        """Star-bootstrap resamples behind each threshold; 0 uses the single sample."""
+        return int(self.data["objective"].get("threshold_resamples", 0))
+
+    @property
     def weighted_metrics(self) -> bool:
         return bool(self.data["objective"].get("weighted_metrics", True))
 
@@ -162,6 +167,12 @@ def _validate(config: Config) -> None:
     if not 0.0 < config.min_precision <= 1.0:
         raise ConfigError(
             f"objective.min_precision must be in (0, 1]; got {config.min_precision}."
+        )
+
+    if config.threshold_resamples < 0:
+        raise ConfigError(
+            "objective.threshold_resamples must be 0 or more; "
+            f"got {config.threshold_resamples}."
         )
 
     selection = config.selection

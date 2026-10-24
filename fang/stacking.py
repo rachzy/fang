@@ -22,6 +22,7 @@ from .data import star_balanced_weights
 from .errors import DataDiversityError
 from .metrics import (
     ThresholdChoice,
+    bootstrap_threshold,
     recall_at_precision,
     safe_average_precision,
     select_threshold,
@@ -661,14 +662,18 @@ def _choose_thresholds(
             "No cross-fitted candidates of both classes were available for threshold "
             "selection. Add stars with CONFIRMED and FALSE-POSITIVE candidates."
         )
-    weights = star_balanced_weights(groups[rows]) if config.weighted_metrics else None
-
     sources: dict[str, np.ndarray] = {STACK: meta_crossfit}
     for column, learner in enumerate(config.base_learners):
         sources[learner] = base_oof[:, column]
     return {
-        name: select_threshold(
-            y[rows], probabilities[rows], config.min_precision, sample_weight=weights
+        name: bootstrap_threshold(
+            y[rows],
+            probabilities[rows],
+            groups[rows],
+            config.min_precision,
+            config.threshold_resamples,
+            seed=config.seed,
+            weighted=config.weighted_metrics,
         )
         for name, probabilities in sources.items()
     }

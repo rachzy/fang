@@ -195,6 +195,10 @@ greatest recall that keeps precision at or above `objective.min_precision`
 (0.95) on cross-fitted training candidates. Ties resolve towards higher
 precision, then the higher threshold. If no threshold reaches the floor, the
 most precise one is kept and `threshold.json` records `precision_floor_met: false`.
+The saved cutoff is the median of that choice over `objective.threshold_resamples`
+(default 200) star-bootstrap resamples of the cross-fitted rows: near the top of
+the ranking the precision curve rests on a few rows, and a single-sample cutoff
+moved with any one of them.
 
 Hyperparameters use `objective.metric`; it and `selection.metric` accept
 `average_precision` (default), `recall_at_precision` or `precision`.

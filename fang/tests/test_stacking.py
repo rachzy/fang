@@ -130,7 +130,7 @@ def test_every_row_trains_bases_and_the_meta_model(dataset, fast_config, monkeyp
 
     real_fit_base = stacking.fit_base
     real_fit_meta = stacking.fit_meta
-    real_select = stacking.select_threshold
+    real_select = stacking.bootstrap_threshold
 
     def spy_fit_base(learner, params, X, y_, groups, config):
         base_fit_sizes.append(len(y_))
@@ -140,13 +140,13 @@ def test_every_row_trains_bases_and_the_meta_model(dataset, fast_config, monkeyp
         meta_fit_labels.append(np.asarray(y_).copy())
         return real_fit_meta(P, y_, groups, config, params)
 
-    def spy_select(y_, prob, min_precision, sample_weight=None):
+    def spy_select(y_, prob, *args, **kwargs):
         threshold_labels.append(np.asarray(y_).copy())
-        return real_select(y_, prob, min_precision, sample_weight=sample_weight)
+        return real_select(y_, prob, *args, **kwargs)
 
     monkeypatch.setattr(stacking, "fit_base", spy_fit_base)
     monkeypatch.setattr(stacking, "fit_meta", spy_fit_meta)
-    monkeypatch.setattr(stacking, "select_threshold", spy_select)
+    monkeypatch.setattr(stacking, "bootstrap_threshold", spy_select)
 
     fit_stack(dataset.X, y, dataset.star_id, fast_config, dataset.feature_names)
 
@@ -311,18 +311,18 @@ def test_meta_model_and_threshold_use_every_row(dataset, fast_config, monkeypatc
     meta_fit_sizes: list[int] = []
     threshold_sizes: list[int] = []
     real_fit_meta = stacking.fit_meta
-    real_select = stacking.select_threshold
+    real_select = stacking.bootstrap_threshold
 
     def spy_fit_meta(P, y_, groups, config, params=None):
         meta_fit_sizes.append(len(y_))
         return real_fit_meta(P, y_, groups, config, params)
 
-    def spy_select(y_, prob, min_precision, sample_weight=None):
+    def spy_select(y_, prob, *args, **kwargs):
         threshold_sizes.append(len(y_))
-        return real_select(y_, prob, min_precision, sample_weight=sample_weight)
+        return real_select(y_, prob, *args, **kwargs)
 
     monkeypatch.setattr(stacking, "fit_meta", spy_fit_meta)
-    monkeypatch.setattr(stacking, "select_threshold", spy_select)
+    monkeypatch.setattr(stacking, "bootstrap_threshold", spy_select)
 
     fit_stack(dataset.X, y, dataset.star_id, fast_config, dataset.feature_names)
 

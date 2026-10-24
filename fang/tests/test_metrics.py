@@ -5,7 +5,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from fang.data import star_balanced_weights
 from fang.metrics import (
+    bootstrap_threshold,
     calibration_curve_points,
     compute_metrics,
     per_star_summary,
@@ -78,6 +80,39 @@ def test_threshold_honours_sample_weights():
     )
     assert unweighted.threshold == pytest.approx(0.7)
     assert heavy.threshold == pytest.approx(0.9)
+
+
+def _ranked_stars(n_stars=40, seed=0):
+    rng = np.random.default_rng(seed)
+    stars = np.repeat([f"s{i}" for i in range(n_stars)], 5).astype(object)
+    y = (rng.random(stars.size) < 0.3).astype(int)
+    p = np.clip(0.5 * y + rng.normal(0.3, 0.2, stars.size), 0, 1)
+    return stars, y, p
+
+
+def test_bootstrap_threshold_without_resamples_is_the_single_sample_choice():
+    stars, y, p = _ranked_stars()
+    single = select_threshold(y, p, 0.9, sample_weight=star_balanced_weights(stars))
+    assert bootstrap_threshold(y, p, stars, 0.9, n_resamples=0) == single
+
+
+def test_bootstrap_threshold_is_reproducible_and_reports_its_resamples():
+    stars, y, p = _ranked_stars()
+    first = bootstrap_threshold(y, p, stars, 0.9, n_resamples=50, seed=3)
+    again = bootstrap_threshold(y, p, stars, 0.9, n_resamples=50, seed=3)
+    assert first == again
+    assert 0 < first.n_resamples <= 50
+    assert first.to_dict()["n_resamples"] == first.n_resamples
+    assert p.min() <= first.threshold <= p.max()
+
+
+def test_bootstrap_threshold_falls_back_when_no_resample_reaches_the_floor():
+    stars = np.array(["a", "a", "b", "b"], dtype=object)
+    y = np.array([0, 1, 0, 1])
+    p = np.array([0.9, 0.8, 0.7, 0.6])
+    choice = bootstrap_threshold(y, p, stars, 0.99, n_resamples=20)
+    assert not choice.achieved
+    assert choice.n_resamples == 0
 
 
 def test_recall_at_precision_is_threshold_free():

@@ -150,6 +150,7 @@ def fast_config() -> Config:
     data["cv"]["inner_folds"] = 2
     data["cv"]["final_oof_folds"] = 2
     data["bootstrap"]["n_resamples"] = 25
+    data["objective"]["threshold_resamples"] = 20
     data["permutation_importance"]["n_repeats"] = 1
     return Config(data=data)
 

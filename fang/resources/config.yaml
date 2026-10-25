@@ -7,7 +7,9 @@ objective:
   # Each threshold is the median over this many star-bootstrap resamples of the
   # cross-fitted rows; 0 takes the single-sample cutoff.
   threshold_resamples: 200
-  weighted_metrics: true
+  # Count every candidate once in thresholds, metrics and tuning: the precision floor is about flagged
+  # candidates being real. Star weights here let a lone false positive on its star count as six planets.
+  weighted_metrics: false
 
 selection:
   strategy: best

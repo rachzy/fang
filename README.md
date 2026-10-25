@@ -209,9 +209,11 @@ threshold, and it is 0 when no threshold reaches the floor. It is reported
 rather than optimised by default: a single false positive just above the floor,
 on a star with few candidates, can move it by more than 0.2.
 
-Reported metrics and the tuning score use the same equal-star weights as the
-fits, so a star with many candidates does not dominate the numbers
-(`objective.weighted_metrics`, on by default).
+Thresholds, reported metrics and the tuning score count every candidate once
+(`objective.weighted_metrics: false`, the default config): the precision floor is
+about flagged candidates being real. With equal-star weights there, a false
+positive alone on its star counted as much as six planets. Set it to `true` to
+weight metrics like the fits.
 
 ### Nested evaluation
 

@@ -9,7 +9,7 @@ objective:
   metric: average_precision
   min_precision: 0.95
   threshold_resamples: 200
-  weighted_metrics: true
+  weighted_metrics: false
 selection:
   strategy: best
   metric: average_precision

@@ -32,8 +32,9 @@ regression as active base learners).
   drop plus median imputation with missing indicators for ExtraTrees, plus `RobustScaler` for SVM/LR.
 - **Stack** (`stacking.py`, `fit_stack`): an L2 logistic-regression meta-learner over the base learners'
   out-of-fold probabilities, and nothing else. The same routine builds every evaluation fold and the shipped model.
-- **Weights.** `star_balanced_weights` gives every star the same total weight in every fit and metric, recomputed
-  per subset. No automatic class weighting.
+- **Weights.** `star_balanced_weights` gives every star the same total weight in every fit, recomputed per
+  subset. Thresholds, metrics and tuning count candidates (`objective.weighted_metrics: false`, chosen
+  2026-10-25: star weights made a lone FP on its star count as six planets). No automatic class weighting.
 - **Tuning.** Seeded (`seed: 42`), deterministic sampling of `n_candidates` from each grid, scored by inner grouped
   CV on `objective.metric` (average precision). `recall_at_precision` is reported, not optimised: it swings on
   single heavily weighted rows.

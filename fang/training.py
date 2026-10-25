@@ -221,9 +221,7 @@ class ModelBundle:
                 f"{current.schema_version}. Retrain the model or pin the matching "
                 "package release."
             )
-        if tuple(stored.feature_columns) != tuple(current.feature_columns) or tuple(
-            getattr(stored, "derived_features", ())
-        ) != tuple(current.derived_features):
+        if tuple(stored.feature_columns) != tuple(current.feature_columns):
             raise SchemaVersionError(
                 f"{source} was trained on a different feature set than the installed "
                 f"schema version {current.schema_version}, despite the matching version "

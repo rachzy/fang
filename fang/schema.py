@@ -27,13 +27,7 @@ class FeatureSchema:
     excluded_columns: dict[str, tuple[str, ...]]
     required_columns: dict[str, tuple[str, ...]]
     unlabelled_values: tuple[str, ...] = ()
-    derived_features: tuple[str, ...] = ()
     source: Path | None = field(default=None, compare=False)
-
-    @property
-    def model_features(self) -> tuple[str, ...]:
-        """What a model is fitted on: the feature columns, then the derived features."""
-        return (*self.feature_columns, *self.derived_features)
 
     @property
     def known_columns(self) -> tuple[str, ...]:
@@ -66,7 +60,6 @@ class FeatureSchema:
             "label_mapping": dict(self.label_mapping),
             "valid_statuses": list(self.valid_statuses),
             "feature_columns": list(self.feature_columns),
-            "derived_features": list(self.derived_features),
             "excluded_columns": {k: list(v) for k, v in self.excluded_columns.items()},
             "required_columns": {k: list(v) for k, v in self.required_columns.items()},
             "unlabelled_values": list(self.unlabelled_values),
@@ -112,7 +105,6 @@ def load_schema(path: str | Path | None = None) -> FeatureSchema:
                 for k, v in (data.get("required_columns") or {}).items()
             },
             unlabelled_values=tuple(str(v) for v in (data.get("unlabelled_values") or [])),
-            derived_features=tuple(str(c) for c in (data.get("derived_features") or [])),
             source=resolved,
         )
     except KeyError as exc:  # pragma: no cover - defensive
@@ -132,25 +124,6 @@ def _check_schema_consistency(schema: FeatureSchema) -> None:
     if overlap:
         raise ConfigError(
             f"Columns appear in both feature_columns and excluded_columns: {sorted(overlap)}"
-        )
-
-    from .features import DERIVED_FEATURES
-
-    unknown = [c for c in schema.derived_features if c not in DERIVED_FEATURES]
-    if unknown:
-        raise ConfigError(
-            f"Unknown derived_features {unknown}; known ones are {sorted(DERIVED_FEATURES)}."
-        )
-    for name in schema.derived_features:
-        missing = [c for c in DERIVED_FEATURES[name][0] if c not in features]
-        if missing:
-            raise ConfigError(
-                f"Derived feature {name!r} needs feature_columns {missing}."
-            )
-    named_twice = features.intersection(schema.derived_features)
-    if named_twice:
-        raise ConfigError(
-            f"Columns appear in both feature_columns and derived_features: {sorted(named_twice)}"
         )
 
     clash = set(schema.unlabelled_values).intersection(schema.label_mapping)

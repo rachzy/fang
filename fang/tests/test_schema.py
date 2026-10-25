@@ -39,7 +39,7 @@ def test_no_withheld_column_reaches_the_feature_matrix(train_dir, schema):
     dataset = load_dataset(train_dir, mode="train", schema=schema)
     for column in schema.withheld_columns:
         assert column not in dataset.features.columns
-    assert tuple(dataset.features.columns) == schema.model_features
+    assert tuple(dataset.features.columns) == tuple(schema.feature_columns)
 
 
 def test_feature_matrix_excludes_provenance_columns(train_dir, schema):

@@ -78,13 +78,13 @@ def test_evaluation_includes_bootstrap_calibration_and_importance(evaluation):
 
     importance = evaluation.importance_summary()
     assert not importance.empty
-    assert set(importance["feature"]) <= set(load_schema().model_features)
+    assert set(importance["feature"]) <= set(load_schema().feature_columns)
 
 
 def test_permutation_importance_comes_from_held_out_folds_only(evaluation):
     frame = evaluation.permutation_importance
     assert set(frame["outer_fold"]) == set(range(evaluation.n_outer_folds))
-    assert set(frame["feature"]) == set(load_schema().model_features)
+    assert set(frame["feature"]) == set(load_schema().feature_columns)
 
 
 def test_comparison_table_marks_the_model_that_would_ship(evaluation):
@@ -234,9 +234,7 @@ def test_summary_includes_nested_evaluation_models(trained, evaluation, tmp_path
 def test_artifact_schema_and_threshold_are_persisted(trained):
     schema = yaml.safe_load((trained.artifact_dir / "feature_schema.yaml").read_text())
     assert schema["schema_version"] == trained.bundle.schema.schema_version
-    assert schema["feature_columns"] + schema["derived_features"] == list(
-        trained.bundle.feature_names
-    )
+    assert schema["feature_columns"] == list(trained.bundle.feature_names)
 
     threshold = json.loads((trained.artifact_dir / "threshold.json").read_text())
     assert threshold["threshold"] == pytest.approx(trained.bundle.threshold)
@@ -311,7 +309,7 @@ def test_loading_rejects_a_changed_feature_set_at_the_same_version(
     trained, tmp_path, schema
 ):
     payload = schema.to_dict()
-    payload["feature_columns"].remove("kurtosis_flux")
+    payload["feature_columns"] = payload["feature_columns"][:-1]
     path = tmp_path / "shrunk_schema.yaml"
     path.write_text(yaml.safe_dump(payload))
 
@@ -384,8 +382,8 @@ def test_prediction_works_without_labels(trained, predict_dir, schema):
 
 def test_prediction_rejects_a_feature_set_mismatch(trained, predict_dir, tmp_path, schema):
     payload = schema.to_dict()
-    payload["feature_columns"].remove("kurtosis_flux")
-    payload["excluded_columns"]["alias"].append("kurtosis_flux")
+    payload["feature_columns"] = payload["feature_columns"][:-1]
+    payload["excluded_columns"]["alias"].append(schema.feature_columns[-1])
     path = tmp_path / "narrow.yaml"
     path.write_text(yaml.safe_dump(payload))
     narrowed = load_schema(path)

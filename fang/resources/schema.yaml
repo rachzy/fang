@@ -1,5 +1,5 @@
-# Bump `schema_version` whenever `feature_columns`, `derived_features` or `known_columns` change
-schema_version: 3
+# Bump `schema_version` whenever `feature_columns` or `known_columns` change
+schema_version: 2
 
 target_column: candidate_label
 status_column: detection_status
@@ -56,11 +56,6 @@ feature_columns:
   - kurtosis_flux
   - outlier_resistance
   - planet_radius_rearth
-
-# Computed by fang from feature_columns (fang/features.py) and appended to them for every model.
-# Shaula does not write these; adding or removing one changes the model input, so bump schema_version.
-derived_features:
-  - log_rho_transit
 
 # Columns that are present in the processed CSVs but deliberately excluded from every model
 excluded_columns:

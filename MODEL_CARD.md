@@ -70,11 +70,8 @@ star with twelve candidates does not outvote a star with two.
 
 ## Features
 
-Exactly 36 numeric CSV columns reach a model, fixed by the versioned allowlist in
-`resources/schema.yaml`, plus `log_rho_transit`, derived in `fang/features.py`: log10 of
-P / T^3 x R_star^2, with R_star taken from the fitted radius and the depth. It is the
-stellar density the transit implies, against a main-sequence star of that radius;
-eclipsing binaries and blends sit apart from planets on it. Withheld columns and the reason each is withheld:
+Exactly 36 numeric columns reach a model, fixed by the versioned allowlist in
+`resources/schema.yaml`. Withheld columns and the reason each is withheld:
 
 - **Supervision / metadata** — `candidate_label`, `detection_status`,
   `matched_target`, `matched_period_ratio`. These encode the answer.

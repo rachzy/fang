@@ -342,7 +342,7 @@ def test_dataset_records_provenance_and_deterministic_order(train_dir, schema):
 def test_validate_dataset_returns_summary(train_dir, schema):
     summary = validate_dataset(train_dir, mode="train", schema=schema)
     assert summary["n_stars"] == 12
-    assert summary["n_features"] == len(schema.feature_columns)
+    assert summary["n_features"] == len(schema.model_features)
     assert summary["n_positive"] > 0
     assert summary["n_negative"] > 0
     assert summary["status_counts"]["rejected"] > 0

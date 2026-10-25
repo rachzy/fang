@@ -53,8 +53,9 @@ holds for the accepted-only meta-model fit.
 ### Feature allowlist
 
 The schema in [`fang/resources/schema.yaml`](fang/resources/schema.yaml)
-is versioned and strict: exactly 36 columns reach a model. Everything else in
-the CSVs is withheld, for a stated reason:
+is versioned and strict: exactly 36 CSV columns reach a model, plus one feature fang
+derives from them (`log_rho_transit`, the stellar density implied by the transit
+shape, in `fang/features.py`). Everything else in the CSVs is withheld, for a stated reason:
 
 | Group | Columns | Why |
 | --- | --- | --- |
@@ -63,7 +64,7 @@ the CSVs is withheld, for a stated reason:
 | non-generalizable epoch | `t0` | an absolute time with no transferable meaning |
 | exact aliases | `duration_days`, `scale_skewness`, `scale_kurtosis`, `scale_outlier_resistance`, `snr_per_transit_mean`, `snr_per_transit_std`, `planet_radius_rjup` | duplicates (up to a unit conversion) of retained features |
 
-Changing `feature_columns` requires bumping `schema_version`; model bundles
+Changing `feature_columns` or `derived_features` requires bumping `schema_version`; model bundles
 refuse to load against a schema they were not trained on.
 
 ## Commands

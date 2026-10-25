@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 
 from .errors import DataValidationError, EmptyDatasetError
+from .features import add_derived_features
 from .schema import FeatureSchema, load_schema
 
 FILENAME_PATTERN = re.compile(r"^(?P<star_id>.+)_(?P<date>\d{8})$")
@@ -345,6 +346,9 @@ def load_dataset(
             f"Features {empty} are entirely empty across the dataset. Populate them or "
             "remove them from the schema before training."
         )
+
+    if not errors:
+        features = add_derived_features(features, schema.derived_features)
 
     # -- supervision --------------------------------------------------------
     y: np.ndarray | None = None

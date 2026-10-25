@@ -71,7 +71,8 @@ regression as active base learners).
   request path. This took three rounds of hardening; do not loosen it without reading why
   (`git log -- fang/service.py`).
 - **Schema.** `fang/resources/schema.yaml` is the contract with Shaula, the upstream feature-extraction
-  pipeline. Bump `schema_version` whenever `feature_columns` changes. `predict_dataset` hard-fails on a
+  pipeline. Bump `schema_version` whenever `feature_columns` or `derived_features` (computed by fang in
+  `features.py`, e.g. `log_rho_transit`) changes. `predict_dataset` hard-fails on a
   mismatch between the data and the model.
 - **Pre-rename models.** Bundles trained when the import name was `src` cannot be unpickled and must be
   retrained; `ModelBundle.load` reports this as `SchemaVersionError`.

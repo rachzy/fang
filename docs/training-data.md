@@ -10,7 +10,8 @@
   label was matched and is withheld as supervision; `UNKNOWN` labels are dropped for training.
 - **Size.** One row per candidate signal. Today: 219 KIC stars with candidates in `train/` (824 labelled rows, 116
   CONFIRMED, 288 of the 708 false positives from inverted copies), 10 in `test/`, so every metric is still noisy.
-- **Columns.** 36 numeric features reach a model (`feature_columns` in `schema.yaml`): orbital and transit shape
+- **Columns.** 36 numeric features reach a model (`feature_columns` in `schema.yaml`), plus `log_rho_transit`,
+  which fang derives from them (`derived_features`, `fang/features.py`): orbital and transit shape
   (`period_days`, `duration_hours`, `vshape_metric`, `ingress_egress_asymmetry`), signal strength (`MES`, `SES_*`,
   `snr_global`, `cdpp_*`), noise and autocorrelation (`local_noise`, `acf_lag_*`), false-positive diagnostics
   (`secondary_depth*`, `odd_even_depth_ratio`) and `planet_radius_rearth`. Everything else Shaula emits is listed

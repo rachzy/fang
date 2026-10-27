@@ -1,5 +1,7 @@
 # Stack-tuning experiment: base learners frozen at their modal picks from nested
-# run 20261024T222443Z-ab130441 (AP tuning); only the meta-learner is tuned.
+# run 20261024T222443Z-ab130441 (AP tuning); the meta-learner and the RBF SVM are tuned.
+# CatBoost was dropped (2026-10-27): its rankings matched LightGBM's (Spearman 0.88 on
+# candidates scoring above 0.3), so the SVM takes its place as a less correlated learner.
 # Picking these after seeing every outer fold leaks a little, so scores from this
 # config compare stack variants with each other. Do not ship from it: run the
 # packaged config (fully tuned) before training a model to serve.
@@ -17,7 +19,7 @@ selection:
   candidates:
   - stack
   - lightgbm
-  - catboost
+  - svm_rbf
   - extra_trees
 cv:
   outer_folds: 5
@@ -76,24 +78,30 @@ models:
       - 0.0
       reg_lambda:
       - 0.1
-  catboost:
-    n_candidates: 1
+  svm_rbf:
+    # Not frozen: tuned over its full grid, since it has no earlier run to take picks from.
+    n_candidates: 24
     fixed:
-      loss_function: Logloss
-      verbose: false
-      allow_writing_files: false
-      thread_count: 1
+      kernel: rbf
+      class_weight: null
+      cache_size: 500
+    calibration:
+      method: sigmoid
+      cv: 5
+      ensemble: false
     grid:
-      depth:
-      - 8
-      iterations:
-      - 300
-      learning_rate:
-      - 0.08
-      l2_leaf_reg:
-      - 3.0
-      random_strength:
-      - 1.0
+      C:
+      - 0.1
+      - 1
+      - 10
+      - 100
+      gamma:
+      - scale
+      - 0.001
+      - 0.01
+      - 0.03
+      - 0.1
+      - 0.3
 meta:
   n_candidates: 4
   C: 100

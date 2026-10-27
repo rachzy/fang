@@ -12,11 +12,14 @@ from fang.schema import load_schema
 WITHHELD = {
     "supervision": ["candidate_label", "detection_status", "matched_target",
                     "matched_period_ratio", "fp_source"],
-    "pipeline_control": ["mes_threshold_used", "is_provisional_detection"],
+    "pipeline_control": ["mes_threshold_used", "is_provisional_detection",
+                         "secondary_scan_trials"],
+    "stellar_context": ["semi_major_axis_au", "orbital_speed_kms", "insolation_earth",
+                        "equilibrium_temp_k"],
     "non_generalizable": ["t0"],
     "alias": ["duration_days", "scale_skewness", "scale_kurtosis",
               "scale_outlier_resistance", "snr_per_transit_mean",
-              "snr_per_transit_std", "planet_radius_rjup"],
+              "snr_per_transit_std", "planet_radius_rjup", "rho_star_transit"],
 }
 
 

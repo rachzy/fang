@@ -53,15 +53,16 @@ holds for the accepted-only meta-model fit.
 ### Feature allowlist
 
 The schema in [`fang/resources/schema.yaml`](fang/resources/schema.yaml)
-is versioned and strict: exactly 36 columns reach a model. Everything else in
+is versioned and strict: exactly 41 columns reach a model. Everything else in
 the CSVs is withheld, for a stated reason:
 
 | Group | Columns | Why |
 | --- | --- | --- |
 | supervision / metadata | `candidate_label`, `detection_status`, `matched_target`, `matched_period_ratio` | they encode the answer |
-| pipeline control | `mes_threshold_used`, `is_provisional_detection` | settings of the detection run, not properties of the candidate |
+| pipeline control | `mes_threshold_used`, `is_provisional_detection`, `secondary_scan_trials` | settings of the detection run, not properties of the candidate |
+| stellar context | `semi_major_axis_au`, `orbital_speed_kms`, `insolation_earth`, `equilibrium_temp_k` | built from catalogue stellar parameters; they describe the host, and false-positive stars differ from planet hosts by how targets were chosen |
 | non-generalizable epoch | `t0` | an absolute time with no transferable meaning |
-| exact aliases | `duration_days`, `scale_skewness`, `scale_kurtosis`, `scale_outlier_resistance`, `snr_per_transit_mean`, `snr_per_transit_std`, `planet_radius_rjup` | duplicates (up to a unit conversion) of retained features |
+| exact aliases | `duration_days`, `scale_skewness`, `scale_kurtosis`, `scale_outlier_resistance`, `snr_per_transit_mean`, `snr_per_transit_std`, `planet_radius_rjup`, `rho_star_transit` | duplicates (up to a unit conversion) of retained features; `rho_star_transit` is carried by `log_rho_ratio` |
 
 Changing `feature_columns` requires bumping `schema_version`; model bundles
 refuse to load against a schema they were not trained on.

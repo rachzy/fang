@@ -70,19 +70,25 @@ star with twelve candidates does not outvote a star with two.
 
 ## Features
 
-Exactly 36 numeric columns reach a model, fixed by the versioned allowlist in
+Exactly 41 numeric columns reach a model, fixed by the versioned allowlist in
 `resources/schema.yaml`. Withheld columns and the reason each is withheld:
 
 - **Supervision / metadata** — `candidate_label`, `detection_status`,
   `matched_target`, `matched_period_ratio`. These encode the answer.
-- **Pipeline controls** — `mes_threshold_used`, `is_provisional_detection`.
+- **Pipeline controls** — `mes_threshold_used`, `is_provisional_detection`,
+  `secondary_scan_trials`.
   Properties of the detection run, not of the candidate; a model that learns
   them learns the pipeline's configuration.
+- **Stellar context** — `semi_major_axis_au`, `orbital_speed_kms`,
+  `insolation_earth`, `equilibrium_temp_k`. Built from catalogue stellar
+  parameters, so they describe the host; false-positive stars differ from planet
+  hosts by how targets were chosen.
 - **Non-generalizable epoch** — `t0`, an absolute reference time that carries no
   transferable meaning.
 - **Exact aliases** — `duration_days`, `scale_skewness`, `scale_kurtosis`,
   `scale_outlier_resistance`, `snr_per_transit_mean`, `snr_per_transit_std`,
-  `planet_radius_rjup`. Each was verified to be an exact duplicate of a retained
+  `planet_radius_rjup`, and `rho_star_transit` (carried by `log_rho_ratio`, which
+  divides it by the catalogue density). The others were verified to be an exact duplicate of a retained
   feature, up to a fixed unit conversion.
 
 Missing values are permitted and imputed inside model folds. Infinities,

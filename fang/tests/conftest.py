@@ -81,6 +81,12 @@ def build_synthetic_frame(
     frame["snr_per_transit_mean"] = frame["SES_mean"]
     frame["snr_per_transit_std"] = frame["SES_std"]
     frame["planet_radius_rjup"] = frame["planet_radius_rearth"] / 11.209
+    frame["rho_star_transit"] = np.abs(rng.normal(1.4, 0.5, size=n))
+    frame["secondary_scan_trials"] = rng.integers(50, 300, size=n).astype(float)
+    frame["semi_major_axis_au"] = (frame["period_days"] / 365.25) ** (2 / 3)
+    frame["orbital_speed_kms"] = 29.8 / np.sqrt(frame["semi_major_axis_au"])
+    frame["insolation_earth"] = 1.0 / frame["semi_major_axis_au"] ** 2
+    frame["equilibrium_temp_k"] = 278.0 * frame["insolation_earth"] ** 0.25
     frame["mes_threshold_used"] = positive * 1.0 + 0.4
     frame["is_provisional_detection"] = [
         1.0 if status == "provisional" else 0.0 for status in statuses

@@ -275,6 +275,15 @@ A `Makefile` wraps the common commands above; run `make help` for the list.
 CSVs under `data/` are local extracts and are not tracked in Git, nor are virtual
 environments, caches, generated models, reports, or predictions.
 
+## TO-DO
+
+- **Experiment tracking.** Add a tracker such as [MLflow](https://mlflow.org/) to log each
+  `evaluate` and `train` run: the resolved config, the tuning picks, the pooled and per-fold
+  metrics, and the run directory as an artifact. A model registry alias (e.g. `production`)
+  would then mark which run is served, instead of reading it from report folders. Today
+  that history lives in `reports/<timestamp>/` and `models/<run_id>/` (both git-ignored), so
+  comparing runs means opening their `metrics.json` files by hand.
+
 ## License
 
 See [LICENSE](LICENSE).

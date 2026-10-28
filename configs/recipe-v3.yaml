@@ -1,10 +1,25 @@
-# Stack-tuning experiment: base learners frozen at their modal picks from nested
-# run 20261024T222443Z-ab130441 (AP tuning); the meta-learner and the RBF SVM are tuned.
-# CatBoost was dropped (2026-10-27): its rankings matched LightGBM's (Spearman 0.88 on
-# candidates scoring above 0.3), so the SVM takes its place as a less correlated learner.
-# Picking these after seeing every outer fold leaks a little, so scores from this
-# config compare stack variants with each other. Do not ship from it: run the
-# packaged config (fully tuned) before training a model to serve.
+# fang recipe v3: the configuration behind the shipped model.
+#
+# Base learners: LightGBM and ExtraTrees frozen at their modal picks from nested run
+# 20261024T222443Z-ab130441; the RBF SVM (quantile-normalised inputs) and the logistic-regression
+# meta-learner are tuned. CatBoost was dropped (2026-10-27): its rankings matched LightGBM's
+# (Spearman 0.88 on candidates scoring above 0.3). The frozen values were picked on older data
+# (feature schema v2), so a fully tuned run of the packaged config may still beat this recipe.
+#
+# Data: rachzy/shaula data/extracted at 74210e3, 907 stars, 3,880 candidates (261 confirmed),
+# feature schema v3. Trained run: 20261028T001027Z-3ca38321 (ships `stack`, threshold 0.308).
+#
+# Results, nested star-grouped evaluation (report 20261027T234705Z-aee489c0; 5 outer x 3 inner
+# folds; held-out stars only, every candidate counted once; R@P = best recall at precision >= 0.95):
+#
+# | model       | precision | recall |   F2  |  R@P  | AP pooled | AP fold mean | ROC-AUC |  TP |  FP |
+# |-------------|-----------|--------|-------|-------|-----------|--------------|---------|-----|-----|
+# | stack  *    |   0.966   | 0.763  | 0.796 | 0.805 |   0.929   |    0.928     |  0.983  | 199 |   7 |
+# | lightgbm    |   0.964   | 0.720  | 0.759 | 0.740 |   0.927   |    0.928     |  0.981  | 188 |   7 |
+# | svm_rbf     |   0.966   | 0.644  | 0.690 | 0.674 |   0.894   |    0.891     |  0.974  | 168 |   6 |
+# | extra_trees |   0.937   | 0.567  | 0.616 | 0.556 |   0.873   |    0.875     |  0.977  | 148 |  10 |
+#
+# * selected by pooled AP; its margin over LightGBM (0.0014) is inside the bootstrap intervals.
 config_version: 1
 seed: 42
 objective:

@@ -1,0 +1,131 @@
+# fang recipe v3: the configuration behind the shipped model.
+#
+# Base learners: LightGBM and ExtraTrees frozen at their modal picks from nested run
+# 20261024T222443Z-ab130441; the RBF SVM (quantile-normalised inputs) and the logistic-regression
+# meta-learner are tuned. CatBoost was dropped (2026-10-27): its rankings matched LightGBM's
+# (Spearman 0.88 on candidates scoring above 0.3). The frozen values were picked on older data
+# (feature schema v2), so a fully tuned run of the packaged config may still beat this recipe.
+#
+# Data: rachzy/shaula data/extracted at 74210e3, 907 stars, 3,880 candidates (261 confirmed),
+# feature schema v3. Trained run: 20261028T001027Z-3ca38321 (ships `stack`, threshold 0.308).
+#
+# Results, nested star-grouped evaluation (report 20261027T234705Z-aee489c0; 5 outer x 3 inner
+# folds; held-out stars only, every candidate counted once; R@P = best recall at precision >= 0.95):
+#
+# | model       | precision | recall |   F2  |  R@P  | AP pooled | AP fold mean | ROC-AUC |  TP |  FP |
+# |-------------|-----------|--------|-------|-------|-----------|--------------|---------|-----|-----|
+# | stack  *    |   0.966   | 0.763  | 0.796 | 0.805 |   0.929   |    0.928     |  0.983  | 199 |   7 |
+# | lightgbm    |   0.964   | 0.720  | 0.759 | 0.740 |   0.927   |    0.928     |  0.981  | 188 |   7 |
+# | svm_rbf     |   0.966   | 0.644  | 0.690 | 0.674 |   0.894   |    0.891     |  0.974  | 168 |   6 |
+# | extra_trees |   0.937   | 0.567  | 0.616 | 0.556 |   0.873   |    0.875     |  0.977  | 148 |  10 |
+#
+# * selected by pooled AP; its margin over LightGBM (0.0014) is inside the bootstrap intervals.
+config_version: 1
+seed: 42
+objective:
+  metric: average_precision
+  min_precision: 0.95
+  threshold_resamples: 200
+  weighted_metrics: false
+selection:
+  strategy: best
+  metric: average_precision
+  score_source: nested_evaluation
+  candidates:
+  - stack
+  - lightgbm
+  - svm_rbf
+  - extra_trees
+cv:
+  outer_folds: 5
+  inner_folds: 3
+  min_outer_folds: 3
+  min_inner_folds: 2
+  final_oof_folds: 3
+  shuffle: true
+bootstrap:
+  n_resamples: 1000
+  confidence_level: 0.95
+permutation_importance:
+  n_repeats: 10
+  metric: average_precision
+calibration:
+  n_bins: 10
+models:
+  extra_trees:
+    n_candidates: 1
+    fixed:
+      n_estimators: 500
+      class_weight: null
+      n_jobs: 1
+    grid:
+      max_depth:
+      - null
+      min_samples_leaf:
+      - 1
+      max_features:
+      - sqrt
+  lightgbm:
+    n_candidates: 1
+    fixed:
+      objective: binary
+      subsample_freq: 1
+      verbose: -1
+      n_jobs: 1
+      deterministic: true
+      force_row_wise: true
+    grid:
+      learning_rate:
+      - 0.05
+      max_depth:
+      - 7
+      num_leaves:
+      - 31
+      n_estimators:
+      - 400
+      min_child_samples:
+      - 30
+      subsample:
+      - 0.85
+      colsample_bytree:
+      - 1.0
+      reg_alpha:
+      - 0.0
+      reg_lambda:
+      - 0.1
+  svm_rbf:
+    # Not frozen: tuned over its full grid, since it has no earlier run to take picks from.
+    n_candidates: 24
+    fixed:
+      kernel: rbf
+      class_weight: null
+      cache_size: 500
+    calibration:
+      method: sigmoid
+      cv: 5
+      ensemble: false
+    grid:
+      C:
+      - 0.1
+      - 1
+      - 10
+      - 100
+      gamma:
+      - scale
+      - 0.001
+      - 0.01
+      - 0.03
+      - 0.1
+      - 0.3
+meta:
+  n_candidates: 4
+  C: 100
+  solver: lbfgs
+  max_iter: 5000
+  class_weight: null
+  grid:
+    C:
+    - 0.1
+    - 1
+    - 10
+    - 100

@@ -163,7 +163,7 @@ def evaluate(
     _echo("")
     _echo(
         f"{'model':22s} {'precision':>10s} {'recall':>8s} {'F2':>8s} "
-        f"{'AP pooled':>10s} {'AP mean':>8s} {'ROC-AUC':>8s}"
+        f"{'R@P':>8s} {'AP pooled':>10s} {'AP mean':>8s} {'ROC-AUC':>8s}"
     )
     for name in reported_models(resolved):
         metrics = result.pooled_metrics[name]
@@ -171,9 +171,14 @@ def evaluate(
         _echo(
             f"{name:20s}{marker} {_fmt(metrics['precision']):>10s} "
             f"{_fmt(metrics['recall']):>8s} {_fmt(metrics['f2']):>8s} "
+            f"{_fmt(metrics['recall_at_precision']):>8s} "
             f"{_fmt(metrics['average_precision']):>10s} {_fmt(fold_ap[name]['mean']):>8s} "
             f"{_fmt(metrics['roc_auc']):>8s}"
         )
+    _echo(
+        f"R@P: best recall at precision >= {resolved.min_precision:.2f}, "
+        "independent of the saved thresholds."
+    )
     _echo("\nIndividual outer-fold AP (AP mean averages scorable folds equally):")
     fold_table = result.fold_ap_table().pivot(
         index="model", columns="outer_fold", values="average_precision"
@@ -272,7 +277,8 @@ def train(
     _echo(f"  saved threshold    : {run.bundle.threshold:.6f}")
     _echo(
         f"  cross-fitted       : precision {_fmt(selected['precision'])}, "
-        f"recall {_fmt(selected['recall'])}, AP {_fmt(selected['average_precision'])}"
+        f"recall {_fmt(selected['recall'])}, AP {_fmt(selected['average_precision'])}, "
+        f"R@P {_fmt(selected['recall_at_precision'])}"
     )
     _echo(f"  artifacts          : {run.artifact_dir} ({len(run.written)} files)")
     _echo("")

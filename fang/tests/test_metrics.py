@@ -5,10 +5,13 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from fang.data import star_balanced_weights
 from fang.metrics import (
+    bootstrap_threshold,
     calibration_curve_points,
     compute_metrics,
     per_star_summary,
+    recall_at_precision,
     select_threshold,
     star_bootstrap_intervals,
 )
@@ -17,54 +20,117 @@ from fang.metrics import (
 # ---------------------------------------------------------------------------
 # Threshold selection
 # ---------------------------------------------------------------------------
-def test_picks_the_most_precise_threshold_meeting_the_recall_floor():
+def test_picks_the_highest_recall_threshold_meeting_the_precision_floor():
     y = np.array([1, 1, 1, 1, 0, 0, 0, 0])
     p = np.array([0.95, 0.90, 0.80, 0.60, 0.70, 0.40, 0.30, 0.10])
 
-    choice = select_threshold(y, p, min_recall=0.95)
-    assert choice.threshold == pytest.approx(0.60)
-    assert choice.recall == pytest.approx(1.0)
-    assert choice.precision == pytest.approx(4 / 5)
-    assert choice.achieved
-
-
-def test_a_lower_recall_floor_permits_a_more_precise_threshold():
-    y = np.array([1, 1, 1, 1, 0, 0, 0, 0])
-    p = np.array([0.95, 0.90, 0.80, 0.60, 0.70, 0.40, 0.30, 0.10])
-
-    choice = select_threshold(y, p, min_recall=0.70)
+    choice = select_threshold(y, p, min_precision=0.95)
     assert choice.threshold == pytest.approx(0.80)
     assert choice.precision == pytest.approx(1.0)
     assert choice.recall == pytest.approx(0.75)
+    assert choice.achieved
 
 
-def test_recall_floor_is_not_traded_away_for_precision():
+def test_a_lower_precision_floor_permits_a_higher_recall_threshold():
+    y = np.array([1, 1, 1, 1, 0, 0, 0, 0])
+    p = np.array([0.95, 0.90, 0.80, 0.60, 0.70, 0.40, 0.30, 0.10])
+
+    choice = select_threshold(y, p, min_precision=0.80)
+    assert choice.threshold == pytest.approx(0.60)
+    assert choice.recall == pytest.approx(1.0)
+    assert choice.precision == pytest.approx(4 / 5)
+
+
+def test_precision_floor_is_not_traded_away_for_recall():
     y = np.array([1] * 10 + [0] * 10)
     p = np.concatenate([np.linspace(0.30, 0.99, 10), np.linspace(0.01, 0.35, 10)])
 
-    choice = select_threshold(y, p, min_recall=0.95)
-    assert choice.recall >= 0.95
+    choice = select_threshold(y, p, min_precision=0.95)
+    assert choice.precision >= 0.95
+    assert choice.recall < 1.0
 
 
-def test_ties_resolve_to_the_more_inclusive_threshold():
+def test_ties_resolve_to_the_stricter_threshold():
     y = np.array([1, 1, 0, 0])
     p = np.array([0.9, 0.8, 0.2, 0.1])
-    # 0.8 and 0.3..0.8 all give perfect precision and recall; the lowest of the
-    # tied candidates is kept because it generalises more safely.
-    choice = select_threshold(y, p, min_recall=0.95)
+    # Every threshold in (0.2, 0.8] gives perfect precision and recall; the
+    # highest is kept so the precision floor has the most margin on new stars.
+    choice = select_threshold(y, p, min_precision=0.95)
     assert choice.threshold == pytest.approx(0.8)
     assert choice.precision == pytest.approx(1.0)
+    assert choice.recall == pytest.approx(1.0)
+
+
+def test_an_unreachable_floor_falls_back_to_the_most_precise_threshold():
+    y = np.array([0, 1, 0, 1])
+    p = np.array([0.9, 0.8, 0.7, 0.6])
+
+    choice = select_threshold(y, p, min_precision=0.95)
+    assert not choice.achieved
+    assert choice.threshold == pytest.approx(0.6)
+    assert choice.precision == pytest.approx(0.5)
 
 
 def test_threshold_honours_sample_weights():
+    y = np.array([1, 0, 1, 0])
+    p = np.array([0.9, 0.8, 0.7, 0.6])
+    unweighted = select_threshold(y, p, min_precision=0.6)
+    heavy = select_threshold(
+        y, p, min_precision=0.6, sample_weight=np.array([1.0, 100.0, 1.0, 1.0])
+    )
+    assert unweighted.threshold == pytest.approx(0.7)
+    assert heavy.threshold == pytest.approx(0.9)
+
+
+def _ranked_stars(n_stars=40, seed=0):
+    rng = np.random.default_rng(seed)
+    stars = np.repeat([f"s{i}" for i in range(n_stars)], 5).astype(object)
+    y = (rng.random(stars.size) < 0.3).astype(int)
+    p = np.clip(0.5 * y + rng.normal(0.3, 0.2, stars.size), 0, 1)
+    return stars, y, p
+
+
+def test_bootstrap_threshold_without_resamples_is_the_single_sample_choice():
+    stars, y, p = _ranked_stars()
+    single = select_threshold(y, p, 0.9, sample_weight=star_balanced_weights(stars))
+    assert bootstrap_threshold(y, p, stars, 0.9, n_resamples=0) == single
+
+
+def test_bootstrap_threshold_is_reproducible_and_reports_its_resamples():
+    stars, y, p = _ranked_stars()
+    first = bootstrap_threshold(y, p, stars, 0.9, n_resamples=50, seed=3)
+    again = bootstrap_threshold(y, p, stars, 0.9, n_resamples=50, seed=3)
+    assert first == again
+    assert 0 < first.n_resamples <= 50
+    assert first.to_dict()["n_resamples"] == first.n_resamples
+    assert p.min() <= first.threshold <= p.max()
+
+
+def test_bootstrap_threshold_falls_back_when_no_resample_reaches_the_floor():
+    stars = np.array(["a", "a", "b", "b"], dtype=object)
     y = np.array([0, 1, 0, 1])
     p = np.array([0.9, 0.8, 0.7, 0.6])
-    unweighted = select_threshold(y, p, min_recall=1.0)
-    heavy = select_threshold(
-        y, p, min_recall=0.5, sample_weight=np.array([1.0, 1.0, 100.0, 1.0])
-    )
-    assert unweighted.threshold == pytest.approx(0.6)
-    assert heavy.threshold == pytest.approx(0.8)
+    choice = bootstrap_threshold(y, p, stars, 0.99, n_resamples=20)
+    assert not choice.achieved
+    assert choice.n_resamples == 0
+
+
+def test_recall_at_precision_is_threshold_free():
+    y = np.array([1, 1, 1, 1, 0, 0, 0, 0])
+    p = np.array([0.95, 0.90, 0.80, 0.60, 0.70, 0.40, 0.30, 0.10])
+
+    assert recall_at_precision(y, p, 0.95) == pytest.approx(0.75)
+    assert recall_at_precision(y, p, 0.80) == pytest.approx(1.0)
+    metrics = compute_metrics(y, p, threshold=0.99, min_precision=0.95)
+    assert metrics["recall_at_precision"] == pytest.approx(0.75)
+    assert np.isnan(compute_metrics(y, p, threshold=0.99)["recall_at_precision"])
+
+
+def test_recall_at_precision_is_zero_when_the_floor_is_unreachable():
+    y = np.array([0, 1, 0, 1])
+    p = np.array([0.9, 0.8, 0.7, 0.6])
+    assert recall_at_precision(y, p, 0.95) == 0.0
+    assert np.isnan(recall_at_precision(np.array([1, 1]), np.array([0.2, 0.8]), 0.95))
 
 
 def test_empty_or_all_negative_input_is_rejected():

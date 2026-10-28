@@ -59,15 +59,27 @@ def test_extra_trees_pipeline_imputes_and_flags_missing():
     assert set(np.unique(out[:, -1])) <= {0.0, 1.0}
 
 
-@pytest.mark.parametrize("learner", ["svm_rbf", "logistic_regression"])
-def test_scaled_pipelines_impute_then_robust_scale(learner):
+def test_logistic_regression_pipeline_imputes_then_robust_scales():
     rng = np.random.default_rng(0)
     X = rng.normal(loc=50.0, scale=20.0, size=(40, 3))
     X[3, 1] = np.nan
-    out = build_preprocessor(learner).fit_transform(X)
+    out = build_preprocessor("logistic_regression").fit_transform(X)
     assert not np.isnan(out).any()
     # Robust scaling centres on the median.
     assert np.allclose(np.median(out[:, :3], axis=0), 0.0, atol=1e-9)
+
+
+def test_svm_pipeline_tames_heavy_tails():
+    """One huge value must not dominate the SVM's distances, unlike under robust scaling."""
+    rng = np.random.default_rng(0)
+    X = rng.lognormal(mean=3.0, sigma=1.0, size=(200, 2))
+    X[0, 0] = 1e6
+    X[5, 1] = np.nan
+    out = build_preprocessor("svm_rbf").fit_transform(X)
+    assert out.shape == (200, 3)  # two features plus one missing indicator
+    assert np.isfinite(out).all()
+    assert np.abs(out[:, :2]).max() < 6.0
+    assert out[5, 2] == 1.0 and out[5, 1] == pytest.approx(np.median(out[:, 1]), abs=0.05)
 
 
 @pytest.mark.parametrize("learner", ["svm_rbf", "logistic_regression", "extra_trees"])

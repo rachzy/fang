@@ -3,8 +3,10 @@
 Each base learner gets its own pipeline so that a transformation appropriate to
 one family is never forced on another: LightGBM keeps raw values and uses its
 native missing-value handling, the tree ensemble gets imputation with missing
-indicators, and the two distance/coefficient based learners additionally get
-robust scaling.
+indicators, logistic regression additionally gets robust scaling, and the RBF SVM
+gets a quantile transform to a normal shape instead: its kernel compares
+distances, and on these heavy-tailed features (MES runs into the thousands) a
+robust-scaled outlier still dominated every distance.
 
 Every pipeline is fitted inside the fold that uses it and persisted with the
 model bundle.
@@ -18,7 +20,7 @@ import numpy as np
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import FunctionTransformer, RobustScaler
+from sklearn.preprocessing import FunctionTransformer, QuantileTransformer, RobustScaler
 
 
 class DropDegenerateFeatures(BaseEstimator, TransformerMixin):
@@ -95,11 +97,28 @@ def _scaled_pipeline() -> Pipeline:
     )
 
 
+def _quantile_pipeline() -> Pipeline:
+    # Transform before imputing, so the 0/1 missing indicators are not reshaped and a
+    # filled value lands on the transformed median (0).
+    return Pipeline(
+        [
+            ("drop_degenerate", DropDegenerateFeatures()),
+            (
+                "quantile",
+                QuantileTransformer(
+                    n_quantiles=500, output_distribution="normal", random_state=0
+                ),
+            ),
+            ("impute", SimpleImputer(strategy="median", add_indicator=True)),
+        ]
+    )
+
+
 _BUILDERS = {
     "lightgbm": _identity_pipeline,
     "catboost": _identity_pipeline,
     "extra_trees": _imputed_pipeline,
-    "svm_rbf": _scaled_pipeline,
+    "svm_rbf": _quantile_pipeline,
     "logistic_regression": _scaled_pipeline,
 }
 

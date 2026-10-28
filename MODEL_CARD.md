@@ -15,7 +15,7 @@
 | **License**       | see `LICENSE`                                                                    |
 
 All configured candidates are fitted on every run and **the highest-scoring candidate
-that meets the recall floor ships**. The full ranking, the runner-up, and the winning
+ships**, ranked by average precision. The full ranking, the runner-up, and the winning
 margin are recorded in `selection.json` and printed by the CLI. Every candidate
 stays in the bundle, so the choice can be revisited without refitting; setting
 `selection.strategy` to a model name pins that model instead.
@@ -32,7 +32,8 @@ established best.
 
 Triage of transit candidates that a detection pipeline has already produced:
 ranking and shortlisting candidates for human or follow-up attention, with the
-operating point deliberately tuned for high recall.
+operating point deliberately tuned for high precision: a `POTENTIAL` flag should
+rarely be wrong, at the cost of missing some planets.
 
 **`potential_probability` is a screening score learned from literature-derived
 labels, not scientific confirmation.** The labels say which candidates were
@@ -69,19 +70,25 @@ star with twelve candidates does not outvote a star with two.
 
 ## Features
 
-Exactly 36 numeric columns reach a model, fixed by the versioned allowlist in
+Exactly 41 numeric columns reach a model, fixed by the versioned allowlist in
 `resources/schema.yaml`. Withheld columns and the reason each is withheld:
 
 - **Supervision / metadata** — `candidate_label`, `detection_status`,
   `matched_target`, `matched_period_ratio`. These encode the answer.
-- **Pipeline controls** — `mes_threshold_used`, `is_provisional_detection`.
+- **Pipeline controls** — `mes_threshold_used`, `is_provisional_detection`,
+  `secondary_scan_trials`.
   Properties of the detection run, not of the candidate; a model that learns
   them learns the pipeline's configuration.
+- **Stellar context** — `semi_major_axis_au`, `orbital_speed_kms`,
+  `insolation_earth`, `equilibrium_temp_k`. Built from catalogue stellar
+  parameters, so they describe the host; false-positive stars differ from planet
+  hosts by how targets were chosen.
 - **Non-generalizable epoch** — `t0`, an absolute reference time that carries no
   transferable meaning.
 - **Exact aliases** — `duration_days`, `scale_skewness`, `scale_kurtosis`,
   `scale_outlier_resistance`, `snr_per_transit_mean`, `snr_per_transit_std`,
-  `planet_radius_rjup`. Each was verified to be an exact duplicate of a retained
+  `planet_radius_rjup`, and `rho_star_transit` (carried by `log_rho_ratio`, which
+  divides it by the catalogue density). The others were verified to be an exact duplicate of a retained
   feature, up to a fixed unit conversion.
 
 Missing values are permitted and imputed inside model folds. Infinities,
@@ -90,16 +97,18 @@ are empty across the whole dataset are rejected at load time.
 
 ## Objective and operating point
 
-Select the threshold with the greatest precision that still achieves **at least
-95 % recall** on cross-fitted accepted candidates. Ties resolve towards higher
-recall, then towards the lower (more inclusive) threshold.
+Select the threshold with the greatest recall that still achieves **at least
+95 % precision** on cross-fitted training candidates. Ties resolve towards higher
+precision, then towards the higher (stricter) threshold. Tuning and model
+selection use average precision; recall at the precision floor is reported but
+not optimised, because one heavily weighted false positive can swing it.
 
 No automatic class weighting is applied beyond the equal-star sample weights.
-The recall target is met through model selection and thresholding, which keeps
+The precision target is met through model selection and thresholding, which keeps
 the probabilities interpretable rather than skewed by a class-weight prior.
 
 The saved threshold is derived from cross-fitted predictions on the **training**
-stars. Held-out recall on genuinely new stars can differ, and the nested
+stars. Held-out precision on genuinely new stars can differ, and the nested
 evaluation reports what it was.
 
 ## Evaluation methodology
@@ -228,9 +237,10 @@ Plots for calibration, precision-recall, ROC, score separation, permutation impo
   detection pipeline. Feeding features produced by a different pipeline, or with
   different settings, invalidates the calibration even when the column names
   match.
-- **Threshold optimism.** The 95 % recall floor is enforced on cross-fitted
-  training predictions. It is a fitted quantity, and held-out recall may fall
-  below it.
+- **Threshold optimism.** The 95 % precision floor is enforced on cross-fitted
+  training predictions. It is a fitted quantity, and held-out precision may fall
+  below it. Near the top of the ranking it rests on few candidates, so it is
+  especially noisy.
 - **Selection optimism.** The shipped model is the best of six on a score that
   is then reported for it, so that score overstates expected performance. The
   effect grows with the number of candidates and shrinks with the number of

@@ -100,13 +100,6 @@ class EvaluationResult:
             for name, pooled in self.pooled_metrics.items()
         }
 
-    def selection_recalls(self) -> dict[str, float]:
-        """Pooled held-out recall per model for recall-constrained selection."""
-        return {
-            name: float(pooled.get("recall", float("nan")))
-            for name, pooled in self.pooled_metrics.items()
-        }
-
     def would_ship(self) -> str:
         """The model `train` would select from these results."""
         selection = self.config.get("selection", {})
@@ -122,8 +115,6 @@ class EvaluationResult:
         return select_best_model(
             self.selection_scores(selection.get("metric", "average_precision")),
             candidates,
-            recalls=self.selection_recalls(),
-            min_recall=float(self.config.get("objective", {}).get("min_recall", 0.95)),
         )
 
     def comparison_table(self) -> pd.DataFrame:
@@ -145,6 +136,9 @@ class EvaluationResult:
                     "recall_lo": ci.get("recall", {}).get("lower", float("nan")),
                     "recall_hi": ci.get("recall", {}).get("upper", float("nan")),
                     "f2": pooled["f2"],
+                    "recall_at_precision": pooled.get("recall_at_precision", float("nan")),
+                    "rap_lo": ci.get("recall_at_precision", {}).get("lower", float("nan")),
+                    "rap_hi": ci.get("recall_at_precision", {}).get("upper", float("nan")),
                     "average_precision": pooled["average_precision"],
                     "mean_fold_average_precision": fold_ap[name]["mean"],
                     "std_fold_average_precision": fold_ap[name]["std"],
@@ -349,7 +343,9 @@ def evaluate_dataset(
                     {
                         "outer_fold": fold,
                         "n_held_out_stars": int(np.unique(groups[val_rows]).size),
-                        **compute_metrics(y[val_rows], probability, threshold, weights),
+                        **compute_metrics(
+                            y[val_rows], probability, threshold, weights, config.min_precision
+                        ),
                     }
                 )
         prediction_blocks.append(block)
@@ -386,7 +382,9 @@ def evaluate_dataset(
     for name in models:
         probability = oof[f"prob_{name}"].to_numpy(dtype=float)
         thresholds = oof[f"threshold_{name}"].to_numpy(dtype=float)
-        pooled_metrics[name] = compute_metrics(y_pooled, probability, thresholds, pooled_weights)
+        pooled_metrics[name] = compute_metrics(
+            y_pooled, probability, thresholds, pooled_weights, config.min_precision
+        )
         calibration[name] = calibration_curve_points(
             y_pooled, probability, config.calibration_bins, pooled_weights
         )
@@ -399,6 +397,7 @@ def evaluate_dataset(
             confidence_level=float(boot_cfg.get("confidence_level", 0.95)),
             seed=config.seed,
             weighted=config.weighted_metrics,
+            min_precision=config.min_precision,
         )
 
     stack_decision = (

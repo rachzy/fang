@@ -3,8 +3,13 @@ seed: 42
 
 objective:
   metric: average_precision
-  min_recall: 0.95
-  weighted_metrics: true
+  min_precision: 0.95
+  # Each threshold is the median over this many star-bootstrap resamples of the
+  # cross-fitted rows; 0 takes the single-sample cutoff.
+  threshold_resamples: 200
+  # Count every candidate once in thresholds, metrics and tuning: the precision floor is about flagged
+  # candidates being real. Star weights here let a lone false positive on its star count as six planets.
+  weighted_metrics: false
 
 selection:
   strategy: best
@@ -107,10 +112,12 @@ models:
       random_strength: [0.0, 0.5, 1.0]
 
 meta:
-  n_candidates: 6
+  n_candidates: 4
   C: 100
   solver: lbfgs
   max_iter: 5000
   class_weight: null
   grid:
-    C: [0.001, 0.01, 0.1, 1, 10, 100]
+    # 0.001 and 0.01 squashed the stack's scores into a narrow band and won on
+    # near-flat inner scores.
+    C: [0.1, 1, 10, 100]

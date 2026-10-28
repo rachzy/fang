@@ -159,7 +159,7 @@ def model_comparison_plot(table: pd.DataFrame, path: Path) -> Path:
         [f"{m}{' *' if p else ''}" for m, p in zip(order["model"], order["is_production"])]
     )
     ax.set_xlim(0, 1.05)
-    ax.set_xlabel("score at each model's own recall-floor threshold")
+    ax.set_xlabel("score at each model's own precision-floor threshold")
     ax.set_title("Pooled held-out performance (* = shipped model)")
     ax.legend(fontsize=8, loc="lower right")
     ax.grid(alpha=0.3, axis="x")

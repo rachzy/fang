@@ -32,14 +32,17 @@ regression as active base learners).
   drop plus median imputation with missing indicators for ExtraTrees, plus `RobustScaler` for SVM/LR.
 - **Stack** (`stacking.py`, `fit_stack`): an L2 logistic-regression meta-learner over the base learners'
   out-of-fold probabilities, and nothing else. The same routine builds every evaluation fold and the shipped model.
-- **Weights.** `star_balanced_weights` gives every star the same total weight in every fit and metric, recomputed
-  per subset. No automatic class weighting.
+- **Weights.** `star_balanced_weights` gives every star the same total weight in every fit, recomputed per
+  subset. Thresholds, metrics and tuning count candidates (`objective.weighted_metrics: false`, chosen
+  2026-10-25: star weights made a lone FP on its star count as six planets). No automatic class weighting.
 - **Tuning.** Seeded (`seed: 42`), deterministic sampling of `n_candidates` from each grid, scored by inner grouped
-  CV on `objective.metric` (average precision).
-- **Threshold.** Per model, the highest-precision threshold that keeps recall >= `objective.min_recall` (0.95) on
-  cross-fitted training rows.
+  CV on `objective.metric` (average precision). `recall_at_precision` is reported, not optimised: it swings on
+  single heavily weighted rows.
+- **Threshold.** Per model, the highest-recall threshold that keeps precision >= `objective.min_precision` (0.95)
+  on cross-fitted training rows, taken as the median over `objective.threshold_resamples` star-bootstrap resamples
+  (a single-sample cutoff jumped with one row near the top). False positives are the costly error.
 - **Selection** (`training.py`, `choose_model`): every candidate (`stack` and each base learner) is fitted and kept
-  in the bundle; the best average precision among those meeting the recall floor ships as `selected_model`.
+  in the bundle; the best `selection.metric` (average precision, pooled held-out) ships as `selected_model`.
   In recent nested evaluations the stack scores below the best gradient-boosted learner; making it outperform them
   without overfitting is an open goal.
 - **Evaluation** (`evaluate.py`): nested `StratifiedGroupKFold` grouped by `star_id` (5 outer, 3 inner; never

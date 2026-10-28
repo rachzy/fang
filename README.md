@@ -53,15 +53,16 @@ holds for the accepted-only meta-model fit.
 ### Feature allowlist
 
 The schema in [`fang/resources/schema.yaml`](fang/resources/schema.yaml)
-is versioned and strict: exactly 36 columns reach a model. Everything else in
+is versioned and strict: exactly 41 columns reach a model. Everything else in
 the CSVs is withheld, for a stated reason:
 
 | Group | Columns | Why |
 | --- | --- | --- |
 | supervision / metadata | `candidate_label`, `detection_status`, `matched_target`, `matched_period_ratio` | they encode the answer |
-| pipeline control | `mes_threshold_used`, `is_provisional_detection` | settings of the detection run, not properties of the candidate |
+| pipeline control | `mes_threshold_used`, `is_provisional_detection`, `secondary_scan_trials` | settings of the detection run, not properties of the candidate |
+| stellar context | `semi_major_axis_au`, `orbital_speed_kms`, `insolation_earth`, `equilibrium_temp_k` | built from catalogue stellar parameters; they describe the host, and false-positive stars differ from planet hosts by how targets were chosen |
 | non-generalizable epoch | `t0` | an absolute time with no transferable meaning |
-| exact aliases | `duration_days`, `scale_skewness`, `scale_kurtosis`, `scale_outlier_resistance`, `snr_per_transit_mean`, `snr_per_transit_std`, `planet_radius_rjup` | duplicates (up to a unit conversion) of retained features |
+| exact aliases | `duration_days`, `scale_skewness`, `scale_kurtosis`, `scale_outlier_resistance`, `snr_per_transit_mean`, `snr_per_transit_std`, `planet_radius_rjup`, `rho_star_transit` | duplicates (up to a unit conversion) of retained features; `rho_star_transit` is carried by `log_rho_ratio` |
 
 Changing `feature_columns` requires bumping `schema_version`; model bundles
 refuse to load against a schema they were not trained on.
@@ -112,7 +113,7 @@ and are exported with candidate counts in `fold_average_precision.csv`.
 Unscorable APs are excluded from the mean and saved as JSON `null` / blank CSV
 cells. Each fold retains the configured candidate weighting; folds receive
 equal weight in the mean. Model selection continues to use the configured
-pooled score and recall floor.
+pooled score.
 
 ### Prediction output
 
@@ -149,7 +150,7 @@ The configured base learners are fitted on every run, together with the L2
 logistic-regression **stack**. Each configured base learner is also evaluated on
 its own.
 
-**Among candidates meeting the recall floor, the highest-scoring candidate ships.**
+**The highest-scoring candidate ships.**
 `train` ranks them,
 serves the winner from `predict`, and records the full ranking in
 `selection.json`. All fitted candidates stay in the bundle, so a run can be
@@ -161,12 +162,11 @@ Selection is configurable under `selection` in the config:
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `strategy` | `best` | `best` picks the top scorer; naming a model (e.g. `stack`) pins it |
-| `metric` | `average_precision` | `average_precision` or `precision`, after applying the recall floor |
+| `metric` | `average_precision` | `average_precision`, `recall_at_precision` or `precision` |
 | `score_source` | `nested_evaluation` | pooled held-out scores, falling back to cross-fitted training scores when evaluation is skipped |
 | `candidates` | configured models plus stack | which configured models may be chosen; ties fall to the first listed |
 
-> **Selection caveat.** The winner is chosen from candidates whose held-out
-> recall meets `objective.min_recall`, using the configured selection metric.
+> **Selection caveat.** The winner is chosen on the configured selection metric.
 > The same held-out score is then reported for it, so taking the best of five
 > correlated estimates still biases the headline number upward. When the
 > winning margin is small relative to the bootstrap intervals -- which it often
@@ -191,14 +191,29 @@ weighting is used.
 
 ### Objective
 
-Pick the threshold with the greatest precision that reaches `objective.min_recall`
-on cross-fitted **accepted** candidates. Ties resolve towards higher recall.
-Hyperparameters use `objective.metric`; both it and `selection.metric` accept
-`average_precision` or `precision`.
+False positives are treated as the costly error. Pick the threshold with the
+greatest recall that keeps precision at or above `objective.min_precision`
+(0.95) on cross-fitted training candidates. Ties resolve towards higher
+precision, then the higher threshold. If no threshold reaches the floor, the
+most precise one is kept and `threshold.json` records `precision_floor_met: false`.
+The saved cutoff is the median of that choice over `objective.threshold_resamples`
+(default 200) star-bootstrap resamples of the cross-fitted rows: near the top of
+the ranking the precision curve rests on a few rows, and a single-sample cutoff
+moved with any one of them.
 
-Reported metrics and the tuning score use the same equal-star weights as the
-fits, so a star with many candidates does not dominate the numbers
-(`objective.weighted_metrics`, on by default).
+Hyperparameters use `objective.metric`; it and `selection.metric` accept
+`average_precision` (default), `recall_at_precision` or `precision`.
+`recall_at_precision` is the best recall over all thresholds whose precision
+meets `objective.min_precision`; like AP it does not depend on the saved
+threshold, and it is 0 when no threshold reaches the floor. It is reported
+rather than optimised by default: a single false positive just above the floor,
+on a star with few candidates, can move it by more than 0.2.
+
+Thresholds, reported metrics and the tuning score count every candidate once
+(`objective.weighted_metrics: false`, the default config): the precision floor is
+about flagged candidates being real. With equal-star weights there, a false
+positive alone on its star counted as much as six planets. Set it to `true` to
+weight metrics like the fits.
 
 ### Nested evaluation
 
@@ -259,6 +274,15 @@ A `Makefile` wraps the common commands above; run `make help` for the list.
 
 CSVs under `data/` are local extracts and are not tracked in Git, nor are virtual
 environments, caches, generated models, reports, or predictions.
+
+## TO-DO
+
+- **Experiment tracking.** Add a tracker such as [MLflow](https://mlflow.org/) to log each
+  `evaluate` and `train` run: the resolved config, the tuning picks, the pooled and per-fold
+  metrics, and the run directory as an artifact. A model registry alias (e.g. `production`)
+  would then mark which run is served, instead of reading it from report folders. Today
+  that history lives in `reports/<timestamp>/` and `models/<run_id>/` (both git-ignored), so
+  comparing runs means opening their `metrics.json` files by hand.
 
 ## License
 

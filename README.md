@@ -91,6 +91,21 @@ uv run fang predict \
 metrics; pass `--skip-evaluation` to skip that during iteration. Both `evaluate`
 and `train` accept `--config` and `--schema` to override the packaged YAML.
 
+### Named configs
+
+Named configs ship inside the package under `fang/resources/configs/`, so they are
+available wherever `fang` is installed (including installs from git).
+`fang configs` lists them, one name per line (`--json` for a JSON array); `default`
+is the built-in `fang/resources/config.yaml`. Select one with `--config-name`,
+which `train` and `evaluate` accept instead of `--config`:
+
+```bash
+uv run fang configs
+uv run fang train --data-dir data/processed/train --artifact-dir models --config-name recipe-v3
+```
+
+An unknown name fails and lists the available ones.
+
 `evaluate --output-dir reports/nested-cv` creates a new directory such as
 `reports/nested-cv/20260907T143000Z-a1b2c3d4/` for every run. The timestamp is
 UTC; the unique suffix separates runs created in the same second. The CLI

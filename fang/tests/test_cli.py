@@ -36,7 +36,7 @@ def test_version():
 
 def test_no_arguments_lists_every_command():
     result = run()
-    for command in ("validate", "evaluate", "train", "predict"):
+    for command in ("validate", "evaluate", "train", "predict", "configs"):
         assert command in result.stdout
 
 
@@ -231,3 +231,62 @@ def test_repeated_training_never_overwrites_a_previous_run(
     assert len(runs) == 2
     assert trained_dir in runs
     assert (trained_dir / "model.joblib").is_file()
+
+
+# ---------------------------------------------------------------------------
+# configs / --config-name
+# ---------------------------------------------------------------------------
+def test_configs_prints_one_name_per_line():
+    result = run("configs")
+    assert result.exit_code == 0
+    names = result.stdout.splitlines()
+    assert names[0] == "default"
+    assert "recipe-v3" in names
+
+
+def test_configs_json_is_an_array():
+    result = run("configs", "--json")
+    assert result.exit_code == 0
+    assert json.loads(result.stdout) == run("configs").stdout.splitlines()
+
+
+@pytest.mark.parametrize("command", ["train", "evaluate"])
+def test_unknown_config_name_lists_the_available_ones(command, train_dir, tmp_path):
+    destination = "--artifact-dir" if command == "train" else "--output-dir"
+    result = run(
+        command, "--data-dir", str(train_dir), destination, str(tmp_path),
+        "--config-name", "nope", "--quiet",
+    )
+    assert result.exit_code == 1
+    assert "Unknown config name 'nope'" in result.stderr
+    assert "default, recipe-v3" in result.stderr
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize("command", ["train", "evaluate"])
+def test_config_and_config_name_are_mutually_exclusive(command, train_dir, config_file, tmp_path):
+    destination = "--artifact-dir" if command == "train" else "--output-dir"
+    result = run(
+        command, "--data-dir", str(train_dir), destination, str(tmp_path),
+        "--config", str(config_file), "--config-name", "default", "--quiet",
+    )
+    assert result.exit_code == 1
+    assert "mutually exclusive" in result.stderr
+
+
+def test_train_resolves_config_name(train_dir, fast_config, tmp_path, monkeypatch):
+    from fang import cli
+
+    seen = {}
+
+    def fake_load_config(path=None, overrides=None, name=None):
+        seen["args"] = (path, name)
+        return fast_config
+
+    monkeypatch.setattr(cli, "load_config", fake_load_config)
+    result = run(
+        "train", "--data-dir", str(train_dir), "--artifact-dir", str(tmp_path),
+        "--config-name", "recipe-v3", "--skip-evaluation", "--quiet",
+    )
+    assert result.exit_code == 0, result.stdout
+    assert seen["args"] == (None, "recipe-v3")

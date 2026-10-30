@@ -9,9 +9,9 @@ from typing import Annotated
 import typer
 
 from . import __version__
-from .config import load_config
+from .config import available_configs, load_config
 from .data import load_dataset, validate_dataset
-from .errors import TransitExoplanetMLError
+from .errors import ConfigError, TransitExoplanetMLError
 from .evaluate import evaluate_dataset
 from .predict import predict_dataset, prediction_counts
 from .schema import load_schema
@@ -38,6 +38,13 @@ DataDir = Annotated[
 ConfigOpt = Annotated[
     Path | None, typer.Option("--config", help="Override the packaged configuration YAML.")
 ]
+ConfigNameOpt = Annotated[
+    str | None,
+    typer.Option(
+        "--config-name",
+        help="Use a packaged config by name (see `fang configs`). Excludes --config.",
+    ),
+]
 SchemaOpt = Annotated[
     Path | None, typer.Option("--schema", help="Override the packaged feature schema YAML.")
 ]
@@ -61,6 +68,12 @@ def _progress(quiet: bool):
 def _fail(exc: Exception) -> None:
     typer.secho(f"error: {exc}", fg=typer.colors.RED, err=True)
     raise typer.Exit(code=1)
+
+
+def _load_config(path: Path | None, name: str | None):
+    if path is not None and name is not None:
+        raise ConfigError("--config and --config-name are mutually exclusive; pass one.")
+    return load_config(path, name=name)
 
 
 def _fmt(value: float | None) -> str:
@@ -131,12 +144,13 @@ def evaluate(
         )
     ],
     config: ConfigOpt = None,
+    config_name: ConfigNameOpt = None,
     schema: SchemaOpt = None,
     quiet: QuietOpt = False,
 ) -> None:
     """Run nested, star-grouped evaluation and write the full report."""
     try:
-        resolved = load_config(config)
+        resolved = _load_config(config, config_name)
         dataset = load_dataset(data_dir, mode="train", schema=load_schema(schema))
         result = evaluate_dataset(
             dataset=dataset, config=resolved, progress=_progress(quiet)
@@ -230,6 +244,7 @@ def train(
         ),
     ],
     config: ConfigOpt = None,
+    config_name: ConfigNameOpt = None,
     schema: SchemaOpt = None,
     skip_evaluation: Annotated[
         bool,
@@ -245,7 +260,7 @@ def train(
 ) -> None:
     """Train the production stack and save an immutable artifact directory."""
     try:
-        resolved = load_config(config)
+        resolved = _load_config(config, config_name)
         dataset = load_dataset(data_dir, mode="train", schema=load_schema(schema))
         run = train_model(
             dataset=dataset,
@@ -284,6 +299,19 @@ def train(
     _echo("")
     if selection.strategy == "best":
         _report_selection_bias(selection.margin, len(selection.candidates))
+
+
+@app.command()
+def configs(
+    as_json: Annotated[bool, typer.Option("--json", help="Emit a JSON array.")] = False,
+) -> None:
+    """List the packaged configs that --config-name accepts, one per line."""
+    names = available_configs()
+    if as_json:
+        _echo(json.dumps(names))
+        return
+    for name in names:
+        _echo(name)
 
 
 @app.command()

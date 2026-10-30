@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 import hashlib
+import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -14,9 +15,12 @@ import pandas as pd
 
 from . import plots
 from .artifacts import (
+    check_run_destination,
     new_run_id,
-    prepare_artifact_dir,
     provenance,
+    publish_run_dir,
+    stage_run_dir,
+    validate_run_id,
     write_csv,
     write_json,
     write_yaml,
@@ -401,8 +405,14 @@ def train_model(
     run_evaluation: bool = True,
     evaluation: EvaluationResult | None = None,
     progress: Progress = None,
+    run_id: str | None = None,
 ) -> TrainingRun:
-    """Tune, cross-fit, and fit the production stack on the whole dataset."""
+    """Tune, cross-fit, and fit the production stack on the whole dataset.
+
+    ``run_id`` names the run (validated before any fitting); omitted, a new
+    timestamped id is generated.
+    """
+    run_id = validate_run_id(run_id) if run_id is not None else new_run_id()
     config = config or load_config()
     if dataset is None:
         if data_dir is None:
@@ -442,7 +452,6 @@ def train_model(
         f"({selection.score_source})",
     )
 
-    run_id = new_run_id()
     bundle = ModelBundle(
         run_id=run_id,
         created_at=dt.datetime.now(dt.UTC).isoformat(),
@@ -538,8 +547,28 @@ def write_training_artifacts(
     artifact_base: str | Path,
     overwrite: bool = False,
 ) -> TrainingRun:
-    """Materialise one immutable artifact directory for a training run."""
-    directory = prepare_artifact_dir(artifact_base, run.bundle.run_id, overwrite=overwrite)
+    """Materialise one immutable artifact directory for a training run.
+
+    Everything is written into a hidden staging directory that is renamed to
+    ``artifact_base/<run_id>`` only once complete, so a reader such as
+    ``list_runs`` never sees a half-written run, and a failed write leaves
+    nothing behind.
+    """
+    destination = check_run_destination(artifact_base, run.bundle.run_id, overwrite=overwrite)
+    staging = stage_run_dir(artifact_base, run.bundle.run_id)
+    try:
+        written = _write_training_files(run, staging)
+        publish_run_dir(staging, destination, overwrite=overwrite)
+    except BaseException:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+
+    run.artifact_dir = destination
+    run.written = [destination / path.relative_to(staging) for path in written]
+    return run
+
+
+def _write_training_files(run: TrainingRun, directory: Path) -> list[Path]:
     bundle = run.bundle
     written: list[Path] = [bundle.save(directory / "model.joblib")]
 
@@ -607,10 +636,7 @@ def write_training_artifacts(
         },
     }
     write_json(directory / "MANIFEST.json", manifest)
-
-    run.artifact_dir = directory
-    run.written = written
-    return run
+    return written
 
 
 def _summary(run: TrainingRun) -> dict[str, Any]:

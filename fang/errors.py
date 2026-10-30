@@ -29,3 +29,7 @@ class DataDiversityError(TransitExoplanetMLError):
 
 class ConfigError(TransitExoplanetMLError):
     """The resolved configuration is invalid."""
+
+
+class RunIdError(TransitExoplanetMLError):
+    """A requested run id is malformed or its run directory already exists."""

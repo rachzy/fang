@@ -14,6 +14,8 @@ import yaml
 from .errors import ConfigError
 
 DEFAULT_CONFIG_RESOURCE = "config.yaml"
+NAMED_CONFIG_DIR = "configs"
+DEFAULT_CONFIG_NAME = "default"
 
 SUPPORTED_METRICS: tuple[str, ...] = ("precision", "average_precision", "recall_at_precision")
 
@@ -120,15 +122,49 @@ def _deep_merge(base: dict[str, Any], overrides: dict[str, Any]) -> dict[str, An
     return base
 
 
-def load_config(path: str | Path | None = None, overrides: dict[str, Any] | None = None) -> Config:
-    """Load the packaged configuration, or a user-supplied replacement."""
+def _resources():
+    return resources.files(f"{__package__}.resources")
+
+
+def available_configs() -> list[str]:
+    """Names accepted by ``load_config(name=...)``: ``default``, then the packaged recipes."""
+    directory = _resources().joinpath(NAMED_CONFIG_DIR)
+    names = sorted(
+        entry.name.removesuffix(".yaml")
+        for entry in (directory.iterdir() if directory.is_dir() else ())
+        if entry.is_file() and entry.name.endswith(".yaml")
+    )
+    return [DEFAULT_CONFIG_NAME, *(name for name in names if name != DEFAULT_CONFIG_NAME)]
+
+
+def _named_config_text(name: str) -> str:
+    if name == DEFAULT_CONFIG_NAME:
+        return _resources().joinpath(DEFAULT_CONFIG_RESOURCE).read_text(encoding="utf-8")
+    entry = _resources().joinpath(NAMED_CONFIG_DIR, f"{name}.yaml")
+    # Names come from the command line: refuse anything that is not a plain packaged name.
+    if "/" in name or "\\" in name or name.startswith(".") or not entry.is_file():
+        raise ConfigError(
+            f"Unknown config name {name!r}. Available configs: "
+            f"{', '.join(available_configs())}."
+        )
+    return entry.read_text(encoding="utf-8")
+
+
+def load_config(
+    path: str | Path | None = None,
+    overrides: dict[str, Any] | None = None,
+    name: str | None = None,
+) -> Config:
+    """Load the packaged configuration, a packaged named one, or a user-supplied file.
+
+    ``path`` and ``name`` are mutually exclusive; with neither, the default
+    packaged config is used.
+    """
+    if path is not None and name is not None:
+        raise ConfigError("Pass either a config path or a config name, not both.")
     resolved = Path(path) if path is not None else None
     if resolved is None:
-        text = (
-            resources.files(f"{__package__}.resources")
-            .joinpath(DEFAULT_CONFIG_RESOURCE)
-            .read_text(encoding="utf-8")
-        )
+        text = _named_config_text(name or DEFAULT_CONFIG_NAME)
     else:
         if not resolved.is_file():
             raise ConfigError(f"Config file not found: {resolved}")

@@ -30,6 +30,7 @@ dev = [
     "pytest>=8.3",
     "coverage>=7.6",
     "ruff>=0.8",
+    "hatchling>=1.33.0",
 ]
 
 [tool.hatch.build.targets.wheel]

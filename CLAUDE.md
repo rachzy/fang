@@ -9,6 +9,7 @@ Its output, `potential_probability`, is a screening score learned from literatur
 - `fang/` - library and CLI (`cli.py`); tests live in `fang/tests/`
 - `fang/service.py` - the surface a gRPC service consumes
 - `fang/resources/schema.yaml` - the feature schema; `fang/resources/config.yaml` - model, CV and tuning config
+  (`default`); `fang/resources/configs/*.yaml` - named configs for `--config-name` (e.g. the frozen `recipe-v3`)
 - `data/processed/{train,test}/` - per-star candidate CSVs; `data/literature/` - confirmed-planet catalogs (all `data/**/*.csv` are git-ignored)
 - `fang/scripts/`, `fang/utils/` - grade predictions / extractions against `data/literature`
 - `models/<run_id>/` - training output; `reports/` - evaluation output (both git-ignored)

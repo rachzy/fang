@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import platform
+import shutil
 import subprocess
 import sys
 import uuid
@@ -16,7 +17,7 @@ import numpy as np
 import pandas as pd
 import yaml
 
-from .errors import TransitExoplanetMLError
+from .errors import RunIdError
 
 TRACKED_PACKAGES = (
     "fang",
@@ -37,6 +38,77 @@ def new_run_id() -> str:
     """A sortable, unique identifier for one training or evaluation run."""
     stamp = dt.datetime.now(dt.UTC).strftime("%Y%m%dT%H%M%SZ")
     return f"{stamp}-{uuid.uuid4().hex[:8]}"
+
+
+def validate_run_id(run_id: str) -> str:
+    """Return ``run_id`` if the service would list a run under that name, else raise.
+
+    ``list_runs`` skips any directory whose name does not match its
+    ``RUN_ID_PATTERN``, so a run trained under such a name would never be served.
+    """
+    from .service import RUN_ID_PATTERN
+
+    valid = RUN_ID_PATTERN.match(run_id) is not None
+    if valid:
+        try:
+            dt.datetime.strptime(run_id[:16], "%Y%m%dT%H%M%SZ")
+        except ValueError:
+            valid = False
+    if not valid:
+        raise RunIdError(
+            f"Invalid run id {run_id!r}: expected <UTC YYYYMMDDTHHMMSSZ>-<lowercase hex>, "
+            f"e.g. {new_run_id()}. The model service only lists runs named this way."
+        )
+    return run_id
+
+
+def check_run_destination(base: str | Path, run_id: str, overwrite: bool = False) -> Path:
+    """Fail early when ``base/run_id`` already holds a run and ``overwrite`` is off."""
+    directory = Path(base) / run_id
+    if directory.exists() and not overwrite and (
+        not directory.is_dir() or any(directory.iterdir())
+    ):
+        raise RunIdError(
+            f"Run directory {directory} already exists. Runs are immutable: choose a "
+            "different --run-id or --artifact-dir, or pass --overwrite to replace it."
+        )
+    return directory
+
+
+def stage_run_dir(base: str | Path, run_id: str) -> Path:
+    """Create a hidden sibling of ``base/run_id`` to write a run into before publishing it.
+
+    Its name never matches the run-id pattern, so ``list_runs`` ignores it even
+    if the process dies before :func:`publish_run_dir` moves it into place.
+    """
+    base = Path(base)
+    base.mkdir(parents=True, exist_ok=True)
+    staging = base / f".{run_id}.partial-{uuid.uuid4().hex[:8]}"
+    staging.mkdir()
+    return staging
+
+
+def publish_run_dir(staging: Path, destination: Path, overwrite: bool = False) -> Path:
+    """Atomically rename a fully written ``staging`` directory to ``destination``.
+
+    With ``overwrite``, an existing run is moved aside first and deleted only
+    once the new one is in place.
+    """
+    check_run_destination(destination.parent, destination.name, overwrite=overwrite)
+    replaced: Path | None = None
+    if destination.exists():
+        if destination.is_dir() and not any(destination.iterdir()):
+            destination.rmdir()
+        else:
+            replaced = destination.parent / f".{destination.name}.replaced-{uuid.uuid4().hex[:8]}"
+            destination.rename(replaced)
+    staging.rename(destination)
+    if replaced is not None:
+        if replaced.is_dir():
+            shutil.rmtree(replaced, ignore_errors=True)
+        else:
+            replaced.unlink(missing_ok=True)
+    return destination
 
 
 def git_commit(repo: Path | None = None) -> dict[str, Any]:
@@ -148,15 +220,3 @@ def write_csv(path: Path, frame: pd.DataFrame) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     frame.to_csv(path, index=False)
     return path
-
-
-def prepare_artifact_dir(base: str | Path, run_id: str, overwrite: bool = False) -> Path:
-    """Create ``base/run_id`` as an immutable destination for one run."""
-    directory = Path(base) / run_id
-    if directory.exists() and any(directory.iterdir()) and not overwrite:
-        raise TransitExoplanetMLError(
-            f"Artifact directory {directory} already exists and is not empty. "
-            "Runs are immutable: choose a different --artifact-dir or pass --overwrite."
-        )
-    directory.mkdir(parents=True, exist_ok=True)
-    return directory

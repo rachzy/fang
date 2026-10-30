@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
+import signal
+import sys
 from pathlib import Path
 from typing import Annotated
 
 import typer
 
 from . import __version__
+from .artifacts import check_run_destination, validate_run_id
 from .config import available_configs, load_config
 from .data import load_dataset, validate_dataset
 from .errors import ConfigError, TransitExoplanetMLError
@@ -74,6 +78,17 @@ def _load_config(path: Path | None, name: str | None):
     if path is not None and name is not None:
         raise ConfigError("--config and --config-name are mutually exclusive; pass one.")
     return load_config(path, name=name)
+
+
+def _exit_on_sigterm() -> None:
+    """Turn SIGTERM (``docker stop``) into a normal exit so cleanup handlers run."""
+
+    def handle(signum, frame) -> None:
+        sys.exit(128 + signum)
+
+    # signal() raises ValueError off the main thread, e.g. under an embedding test runner.
+    with contextlib.suppress(ValueError):
+        signal.signal(signal.SIGTERM, handle)
 
 
 def _fmt(value: float | None) -> str:
@@ -246,6 +261,13 @@ def train(
     config: ConfigOpt = None,
     config_name: ConfigNameOpt = None,
     schema: SchemaOpt = None,
+    run_id: Annotated[
+        str | None,
+        typer.Option(
+            "--run-id",
+            help="Name the run directory (<UTC YYYYMMDDTHHMMSSZ>-<hex>). Default: generated.",
+        ),
+    ] = None,
     skip_evaluation: Annotated[
         bool,
         typer.Option(
@@ -254,12 +276,20 @@ def train(
         ),
     ] = False,
     overwrite: Annotated[
-        bool, typer.Option("--overwrite", help="Allow writing into a non-empty run directory.")
+        bool, typer.Option("--overwrite", help="Replace an existing run directory.")
     ] = False,
     quiet: QuietOpt = False,
 ) -> None:
-    """Train the production stack and save an immutable artifact directory."""
+    """Train the production stack and save an immutable artifact directory.
+
+    The run directory appears only once every file is written, and any failure
+    exits non-zero, so it is safe to run detached.
+    """
+    _exit_on_sigterm()
     try:
+        if run_id is not None:
+            validate_run_id(run_id)
+            check_run_destination(artifact_dir, run_id, overwrite=overwrite)
         resolved = _load_config(config, config_name)
         dataset = load_dataset(data_dir, mode="train", schema=load_schema(schema))
         run = train_model(
@@ -267,6 +297,7 @@ def train(
             config=resolved,
             run_evaluation=not skip_evaluation,
             progress=_progress(quiet),
+            run_id=run_id,
         )
         run = write_training_artifacts(run, artifact_dir, overwrite=overwrite)
     except TransitExoplanetMLError as exc:

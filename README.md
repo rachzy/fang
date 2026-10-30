@@ -106,6 +106,20 @@ uv run fang train --data-dir data/processed/train --artifact-dir models --config
 
 An unknown name fails and lists the available ones.
 
+### Remote and detached training
+
+`train --run-id <id>` names the run directory instead of generating one. The id
+must look like a generated one, `<UTC YYYYMMDDTHHMMSSZ>-<lowercase hex>` (for
+example `20261030T160000Z-3ca38321`), because the model service only lists runs
+named this way. A malformed id, or one whose directory already exists, fails
+before any data is loaded; `--overwrite` replaces an existing run.
+
+`train` writes the run into a hidden staging directory and renames it into
+place only once every file is written, so a service listing the artifact
+directory never sees a half-written run, and a failed or interrupted run
+(including `SIGTERM`, e.g. `docker stop`) leaves nothing behind. Any failure
+exits with a non-zero status.
+
 `evaluate --output-dir reports/nested-cv` creates a new directory such as
 `reports/nested-cv/20260907T143000Z-a1b2c3d4/` for every run. The timestamp is
 UTC; the unique suffix separates runs created in the same second. The CLI
@@ -114,8 +128,8 @@ prints the actual destination, and existing reports are preserved.
 Each run writes `metrics.json`, `model_comparison.csv`,
 `fold_average_precision.csv`, `oof_predictions.csv`, `per_star.csv`,
 `permutation_importance.csv` and its summary, `provenance.json`, and a `plots/`
-directory. `train` nests the same set under `evaluation/` inside its existing
-timestamped run directory.
+directory. `train` nests the same set under `evaluation/` inside its own run
+directory.
 
 AP reporting distinguishes **pooled AP** (all outer-fold predictions combined)
 from **mean fold AP** (the arithmetic mean of individual outer-fold APs).

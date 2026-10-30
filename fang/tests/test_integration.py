@@ -402,3 +402,44 @@ def test_per_star_summary_covers_every_reported_model(evaluation, train_dir, sch
         rows = frame[frame["model"] == name]
         assert set(rows["star_id"]) == set(dataset.stars)
         assert (rows["n_flagged"] <= rows["n_candidates"]).all()
+
+
+def test_a_run_is_invisible_to_list_runs_until_fully_written(trained, tmp_path, monkeypatch):
+    """The service may list runs while training writes one; it must never see a partial run."""
+    from fang import training
+    from fang.service import list_runs
+
+    seen_while_writing = []
+    real_write_json = training.write_json
+
+    def spying_write_json(path, payload):
+        seen_while_writing.append([run.run_id for run in list_runs(tmp_path)])
+        return real_write_json(path, payload)
+
+    monkeypatch.setattr(training, "write_json", spying_write_json)
+    rerun = replace(trained, artifact_dir=None, written=[])
+    write_training_artifacts(rerun, tmp_path)
+
+    assert seen_while_writing and all(seen == [] for seen in seen_while_writing)
+    assert [run.run_id for run in list_runs(tmp_path)] == [trained.bundle.run_id]
+    assert [p.name for p in tmp_path.iterdir()] == [trained.bundle.run_id]
+    assert all(path.is_relative_to(tmp_path / trained.bundle.run_id) for path in rerun.written)
+
+
+def test_a_failed_write_leaves_nothing_behind(trained, tmp_path, monkeypatch):
+    from fang import training
+
+    def boom(run):
+        raise RuntimeError("interrupted")
+
+    monkeypatch.setattr(training, "_summary", boom)
+    with pytest.raises(RuntimeError):
+        write_training_artifacts(replace(trained, artifact_dir=None, written=[]), tmp_path)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_train_model_rejects_a_malformed_run_id_before_fitting(fast_config):
+    from fang.errors import RunIdError
+
+    with pytest.raises(RunIdError, match="Invalid run id"):
+        train_model(dataset=object(), config=fast_config, run_id="latest")

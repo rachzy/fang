@@ -13,6 +13,7 @@ from typer.testing import CliRunner
 
 from fang import __version__
 from fang.cli import app
+from fang.service import list_runs
 
 runner = CliRunner()
 
@@ -290,3 +291,110 @@ def test_train_resolves_config_name(train_dir, fast_config, tmp_path, monkeypatc
     )
     assert result.exit_code == 0, result.stdout
     assert seen["args"] == (None, "recipe-v3")
+
+
+# ---------------------------------------------------------------------------
+# train --run-id, detached safety
+# ---------------------------------------------------------------------------
+RUN_ID = "20261030T120000Z-a1b2c3d4"
+
+
+@pytest.fixture(scope="module")
+def named_run(train_dir, config_file, tmp_path_factory) -> Path:
+    base = tmp_path_factory.mktemp("cli-named")
+    result = run(
+        "train",
+        "--data-dir", str(train_dir),
+        "--artifact-dir", str(base),
+        "--config", str(config_file),
+        "--run-id", RUN_ID,
+        "--skip-evaluation",
+        "--quiet",
+    )
+    assert result.exit_code == 0, result.stdout
+    assert f"Trained run {RUN_ID}" in result.stdout
+    return base / RUN_ID
+
+
+def test_custom_run_id_names_the_run_and_is_listed(named_run):
+    assert [p.name for p in named_run.parent.iterdir()] == [RUN_ID]
+    summary = json.loads((named_run / "summary.json").read_text())
+    assert summary["run_id"] == RUN_ID
+    assert not (named_run / "evaluation").exists()
+    [info] = list_runs(named_run.parent)
+    assert info.run_id == RUN_ID
+    assert info.created_at == "2026-10-30T12:00:00Z"
+
+
+def test_default_run_id_is_still_generated(trained_dir):
+    assert re.fullmatch(r"\d{8}T\d{6}Z-[0-9a-f]{8}", trained_dir.name)
+    assert trained_dir.name in {info.run_id for info in list_runs(trained_dir.parent)}
+
+
+def _fail_if_called(*args, **kwargs):
+    raise AssertionError("training work started before the run id was checked")
+
+
+@pytest.mark.parametrize(
+    "run_id",
+    ["latest", "20261030T120000Z", "20261030T120000Z-XYZ", "20261399T120000Z-ab", "../x"],
+)
+def test_invalid_run_id_is_rejected_before_loading_data(run_id, train_dir, tmp_path, monkeypatch):
+    from fang import cli
+
+    monkeypatch.setattr(cli, "load_dataset", _fail_if_called)
+    monkeypatch.setattr(cli, "train_model", _fail_if_called)
+    result = run(
+        "train", "--data-dir", str(train_dir), "--artifact-dir", str(tmp_path),
+        "--run-id", run_id, "--quiet",
+    )
+    assert result.exit_code == 1
+    assert "Invalid run id" in result.stderr
+    assert "Traceback" not in result.stderr
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_existing_run_id_is_rejected_before_loading_data(named_run, train_dir, monkeypatch):
+    from fang import cli
+
+    monkeypatch.setattr(cli, "load_dataset", _fail_if_called)
+    result = run(
+        "train", "--data-dir", str(train_dir), "--artifact-dir", str(named_run.parent),
+        "--run-id", RUN_ID, "--quiet",
+    )
+    assert result.exit_code == 1
+    assert "already exists" in result.stderr
+    assert "--overwrite" in result.stderr
+
+
+def test_overwrite_replaces_an_existing_run(train_dir, config_file, tmp_path):
+    stale = tmp_path / RUN_ID
+    stale.mkdir()
+    (stale / "stale.txt").write_text("old")
+    result = run(
+        "train", "--data-dir", str(train_dir), "--artifact-dir", str(tmp_path),
+        "--config", str(config_file), "--run-id", RUN_ID, "--overwrite",
+        "--skip-evaluation", "--quiet",
+    )
+    assert result.exit_code == 0, result.stdout
+    assert [p.name for p in tmp_path.iterdir()] == [RUN_ID]
+    assert not (stale / "stale.txt").exists()
+    assert (stale / "model.joblib").is_file()
+
+
+def test_unexpected_training_failure_exits_non_zero_and_leaves_no_run(
+    train_dir, config_file, tmp_path, monkeypatch
+):
+    from fang import training
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("disk on fire")
+
+    monkeypatch.setattr(training, "_summary", boom)
+    result = run(
+        "train", "--data-dir", str(train_dir), "--artifact-dir", str(tmp_path),
+        "--config", str(config_file), "--run-id", RUN_ID, "--skip-evaluation", "--quiet",
+    )
+    assert result.exit_code != 0
+    assert list(tmp_path.iterdir()) == []
+    assert list_runs(tmp_path) == []
